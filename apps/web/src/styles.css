@@ -155,7 +155,10 @@ a { color: var(--cyan); }
 .tcard.spent.sm { width: var(--sm-h); }
 .tcard.spent.xs { width: var(--xs-h); }
 .tcard-inner { width: 100%; height: 100%; display: grid; place-items: center; }
+.tcard-inner > * { transition: transform .25s ease; }
 .tcard.spent .tcard-inner > * { transform: rotate(90deg); }
+.tcard.fresh { animation: land .35s ease-out; }
+@keyframes land { from { transform: translateY(-14px) scale(1.12); opacity: 0; } to { transform: none; opacity: 1; } }
 .tcard[draggable="true"] { cursor: grab; }
 .tcard.actionable > .tcard-inner > .card-face { box-shadow: 0 0 0 2px var(--cyan), 0 0 14px #00f0ff66; }
 .tcard.hl > .tcard-inner > .card-face { box-shadow: 0 0 0 3px var(--yellow), 0 0 18px #f5e60088 !important; }

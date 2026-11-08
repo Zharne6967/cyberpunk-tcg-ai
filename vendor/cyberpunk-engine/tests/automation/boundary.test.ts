@@ -55,8 +55,10 @@ describe("automation/ boundary", () => {
   const files = listFiles(AUTOMATION_DIR);
 
   test("scans at least one strategy and one resolver", () => {
-    expect(files.some((f) => f.includes("/strategies/"))).toBe(true);
-    expect(files.some((f) => f.includes("/resolvers/"))).toBe(true);
+    // cyberpunk-tcg-ai local patch: normalise Windows path separators.
+    const posix = files.map((f) => f.replace(/\\/g, "/"));
+    expect(posix.some((f) => f.includes("/strategies/"))).toBe(true);
+    expect(posix.some((f) => f.includes("/resolvers/"))).toBe(true);
   });
 
   for (const file of files) {

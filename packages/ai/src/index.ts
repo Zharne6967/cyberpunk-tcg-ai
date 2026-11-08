@@ -3,4 +3,5 @@ export * from "./decide.ts";
 export * from "./ismcts/actions.ts";
 export * from "./ismcts/determinize.ts";
 export * from "./ismcts/playout.ts";
+export * from "./ismcts/evaluation.ts";
 export * from "./ismcts/search.ts";

@@ -43,5 +43,10 @@ commit: `6de59de1c203827edc1bc6faa1bc6184cd126a5f`
 8. `cyberpunk-engine/src/view/filter.ts`: face-down Legends are hidden from their owner too
    (CR 5.7.4.1; only `meta.revealed` from a "look at" effect shows them), also as effect sources.
    Test `tests/comprehensive-rules/cr-gigs-hidden.test.ts` updated to assert the rule.
-   Note: `tests/automation/boundary.test.ts > scans at least one strategy and one resolver` fails in this
-   checkout (path scan); not investigated yet, unrelated to the patches above.
+9. Tests adjusted to patch 8 / Windows:
+   - `cyberpunk-ai-runner/tests/curve-prompt-lines.test.ts`: 5 tests skipped (`test.skip`, comment in place) —
+     they assert that an upstream bot calls one specific face-down Legend by identity, which CR 5.7.4.1
+     makes impossible.
+   - `cyberpunk-engine/tests/automation/boundary.test.ts`: path check normalises Windows `\` separators.
+   - `cyberpunk-ai-runner/tests/train.test.ts` can time out when the CPU is busy (e.g. a benchmark running);
+     it passes on its own.

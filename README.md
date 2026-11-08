@@ -77,6 +77,8 @@ pnpm images                                       # pobierz wszystkie obrazki ka
 pnpm selftest 3 tactical                          # automatyczny test: 3 pełne partie przez WebSocket
 pnpm sim --list                                   # lista talii i botów
 pnpm sim --a starter-the-heist --b starter-embracing-power --bot-a tactical --bot-b greedy --games 20
+pnpm bench --a ismcts-fast --b masterful --pairs 8 --games 4   # benchmark botów na wielu parach talii
+pnpm calibrate 1000                               # naucz ocenę pozycji bota na partiach self-play
 pnpm test                                         # testy silnika i naszego kodu
 pnpm export-data                                  # odśwież data/cards.json i talie z silnika
 ```

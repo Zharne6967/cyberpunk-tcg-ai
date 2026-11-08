@@ -18,7 +18,9 @@
     "test:engine": "vitest run vendor/cyberpunk-engine",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "export-data": "tsx tools/export-data/src/index.ts",
-    "sim": "tsx tools/sim/src/cli.ts"
+    "sim": "tsx tools/sim/src/cli.ts",
+    "bench": "tsx tools/sim/src/bench.ts",
+    "calibrate": "tsx tools/sim/src/calibrate.ts"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

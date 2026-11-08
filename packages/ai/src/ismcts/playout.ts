@@ -9,6 +9,7 @@ import {
   type PlayerPrompt,
 } from "@tcg/cyberpunk-engine";
 import { actorOf, applyAction, legalActions, type Action } from "./actions.ts";
+import { learnedWinProbability } from "./evaluation.ts";
 
 export interface PlayoutOptions {
   /**
@@ -21,11 +22,13 @@ export interface PlayoutOptions {
   maxSteps: number;
   /** Probability of a uniformly random legal move instead of the greedy one. */
   epsilon: number;
-  /** Logistic scale that maps `evaluateBoard` to a win probability. */
+  /** Logistic scale that maps `evaluateBoard` to a win probability (evaluator "board"). */
   evalScale: number;
+  /** "learned" = logistic model fitted on self-play (evaluation.ts); "board" = engine evaluateBoard. */
+  evaluator: "learned" | "board";
 }
 
-export const DEFAULT_PLAYOUT: PlayoutOptions = { turns: 1, maxSteps: 80, epsilon: 0.1, evalScale: 160 };
+export const DEFAULT_PLAYOUT: PlayoutOptions = { turns: 1, maxSteps: 80, epsilon: 0.1, evalScale: 610, evaluator: "learned" };
 
 /** Win probability for `pid` from a heuristic board score (engine `evaluateBoard`). */
 export function boardWinProbability(state: MatchState, pid: PlayerId, scale: number): number {
@@ -93,5 +96,5 @@ export function playout(start: MatchState, viewer: PlayerId, opts: PlayoutOption
     if (!after) break;
     s = after;
   }
-  return boardWinProbability(s, viewer, opts.evalScale);
+  return opts.evaluator === "board" ? boardWinProbability(s, viewer, opts.evalScale) : learnedWinProbability(s, viewer);
 }

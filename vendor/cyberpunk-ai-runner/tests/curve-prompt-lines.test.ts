@@ -187,7 +187,9 @@ describe("RRY prompt lines", () => {
     "authored-rry-llorona-steel-dragon",
     "authored-rry-detonate-gear-curve",
   ] as const) {
-    test(`${deckId} on the play sells then Calls the one ready Legend`, () => {
+    // cyberpunk-tcg-ai local patch 9: skipped — asserts a call of a specific face-down Legend by identity;
+    // under CR 5.7.4.1 (vendor patch 8) the owner cannot know which face-down Legend is which.
+    test.skip(`${deckId} on the play sells then Calls the one ready Legend`, () => {
       const engine = CyberpunkTestEngine.createWithFixture(
         {
           hand: [welcomeToNightCityRetailCarnageAtTheColosseum],
@@ -209,7 +211,9 @@ describe("RRY prompt lines", () => {
       expect(taken.some((step) => step.move === "playCard")).toBe(false);
     });
 
-    test(`${deckId} on the draw Calls Muamar or Dexter and plays All is Lost`, () => {
+    // cyberpunk-tcg-ai local patch 9: skipped — asserts a call of a specific face-down Legend by identity;
+    // under CR 5.7.4.1 (vendor patch 8) the owner cannot know which face-down Legend is which.
+    test.skip(`${deckId} on the draw Calls Muamar or Dexter and plays All is Lost`, () => {
       const engine = CyberpunkTestEngine.createWithFixture(
         {
           hand: [welcomeToNightCityRetailIndustrialAssembly, welcomeToNightCityRetailAllIsLost],
@@ -534,7 +538,9 @@ const bbgLegends = [
 ];
 
 describe("remaining curve branches", () => {
-  test("RRY on the draw plays The Heist with the Call", () => {
+  // cyberpunk-tcg-ai local patch 9: skipped — asserts a call of a specific face-down Legend by identity;
+  // under CR 5.7.4.1 (vendor patch 8) the owner cannot know which face-down Legend is which.
+  test.skip("RRY on the draw plays The Heist with the Call", () => {
     const engine = CyberpunkTestEngine.createWithFixture(
       {
         hand: [welcomeToNightCityRetailIndustrialAssembly, welcomeToNightCityRetailTheHeist],

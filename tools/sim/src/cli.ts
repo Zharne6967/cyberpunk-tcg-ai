@@ -64,9 +64,15 @@ async function main() {
   const strategyA = String(args["bot-a"] ?? "tactical");
   const strategyB = String(args["bot-b"] ?? "greedy");
   for (const s of [strategyA, strategyB]) if (!STRATEGIES[s]) throw new Error(`Nieznany bot ${s}`);
-  // --iters-a 200 / --iters-b 800: override the ISMCTS iteration budget per side.
-  const ismctsA = args["iters-a"] ? { iterations: Number(args["iters-a"]), timeMs: undefined } : undefined;
-  const ismctsB = args["iters-b"] ? { iterations: Number(args["iters-b"]), timeMs: undefined } : undefined;
+  // --iters-a 200 / --iters-b 800: override the ISMCTS iteration budget per side (no time cap, reproducible).
+  // --opts-a '{"exploration":0.4,"playout":{"turns":2}}': any other ISMCTS setting per side.
+  const side = (s: "a" | "b") => {
+    const extra = args[`opts-${s}`] ? (JSON.parse(String(args[`opts-${s}`])) as Record<string, unknown>) : {};
+    const iters = args[`iters-${s}`] ? { iterations: Number(args[`iters-${s}`]), timeMs: undefined } : {};
+    return Object.keys(extra).length || Object.keys(iters).length ? { timeMs: undefined, ...iters, ...extra } : undefined;
+  };
+  const ismctsA = side("a");
+  const ismctsB = side("b");
   const games = Number(args.games ?? 10);
   const workers = Math.max(1, Math.min(Number(args.workers ?? Math.max(1, cpus().length - 1)), games));
   const seedBase = String(args.seed ?? "sim");

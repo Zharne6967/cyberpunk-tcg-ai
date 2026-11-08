@@ -30,6 +30,11 @@ export interface BoardCtx {
 
 // One drag at a time; module state keeps drag-over re-renders cheap.
 let dragging: DragInfo | null = null;
+// Cards already shown in a zone; a card arriving somewhere new gets a short "lands on the table" animation.
+const seenInZone = new Set<string>();
+// Not on the first paint of the table (everything would "land" at once).
+let landingArmed = false;
+let armTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function cardData(db: CardDb, c: CardView | undefined) {
   if (!c || !c.cardName) return undefined;
@@ -106,8 +111,13 @@ export function TableCard({ c, ctx, size = "md", dragFrom, dropTarget }: { c: Ca
   const data = cardData(ctx.db, c);
   const drop = useDrop(ctx, { kind: "card", card: c });
   const acts = ctx.hints ? ctx.actionsByCard.get(c.instanceId) : undefined;
+  const placeKey = `${c.zone}:${c.instanceId}`;
+  armTimer ??= setTimeout(() => (landingArmed = true), 800);
+  const fresh = landingArmed && !seenInZone.has(placeKey) && c.zone !== "hand";
+  seenInZone.add(placeKey);
   const cls = [
     "tcard",
+    fresh ? "fresh" : "",
     size,
     c.spent ? "spent" : "",
     acts?.length ? "actionable" : "",
