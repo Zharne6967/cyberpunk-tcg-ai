@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { BotSummary, DeckSummary } from "@cpai/core/protocol";
 import { api, loadCardDb, type CardDb } from "../api.ts";
 
 const LS_KEY = "cpai.lobby.v1";
+const RANDOM = "__random";
 
 function loadPrefs(): { yourDeck?: string; botDeck?: string; bot?: string } {
   try {
@@ -22,26 +23,75 @@ function ColorDots({ colors }: { colors: string[] }) {
   );
 }
 
-function DeckList({ decks, db, value, onChange, allowRandom }: { decks: DeckSummary[]; db?: CardDb; value: string; onChange: (id: string) => void; allowRandom?: boolean }) {
+/** Compact deck picker: shows the chosen deck; opens a searchable list on click. */
+function DeckPicker({ decks, db, value, onChange, allowRandom }: { decks: DeckSummary[]; db?: CardDb; value: string; onChange: (id: string) => void; allowRandom?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  const legendNames = (d: DeckSummary) => d.legends.map((s) => db?.bySlug.get(s)?.name ?? s).join(" · ");
+  const current = decks.find((d) => d.id === value);
+  const shown = decks
+    .filter((d) => !q.trim() || `${d.name} ${legendNames(d)}`.toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => Number(!!b.editable) - Number(!!a.editable) || a.name.localeCompare(b.name));
+  const pick = (id: string) => {
+    onChange(id);
+    setOpen(false);
+    setQ("");
+  };
   return (
-    <div className="deck-list">
-      {allowRandom && (
-        <button className={`deck-row ${value === "__random" ? "sel" : ""}`} onClick={() => onChange("__random")}>
+    <div className="deck-picker" ref={ref}>
+      <button className={`picker-btn ${open ? "open" : ""}`} onClick={() => setOpen(!open)}>
+        {value === RANDOM ? (
           <span className="deck-name">🎲 Random deck</span>
-          <span className="deck-meta">a random legal deck</span>
-        </button>
+        ) : current ? (
+          <>
+            <span className="deck-name">
+              <ColorDots colors={current.colors} /> {current.editable ? "★ " : ""}
+              {current.name}
+            </span>
+            <span className="deck-meta">
+              {legendNames(current)} · {current.size} cards
+            </span>
+          </>
+        ) : (
+          <span className="deck-name muted">Choose a deck…</span>
+        )}
+        <span className="caret">▾</span>
+      </button>
+      {open && (
+        <div className="picker-pop">
+          <input autoFocus className="search" placeholder="Search decks or Legends" value={q} onChange={(e) => setQ(e.target.value)} />
+          <div className="picker-list">
+            {allowRandom && !q && (
+              <button className={`picker-row ${value === RANDOM ? "sel" : ""}`} onClick={() => pick(RANDOM)}>
+                <span className="deck-name">🎲 Random deck</span>
+              </button>
+            )}
+            {shown.map((d) => (
+              <button key={d.id} className={`picker-row ${value === d.id ? "sel" : ""}`} disabled={!d.legal} onClick={() => pick(d.id)}>
+                <span className="deck-name">
+                  <ColorDots colors={d.colors} /> {d.editable ? "★ " : ""}
+                  {d.name}
+                </span>
+                <span className="deck-meta">
+                  {legendNames(d)} · {d.size} cards{d.legal ? "" : " · not legal"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
-      {decks.map((d) => (
-        <button key={d.id} className={`deck-row ${value === d.id ? "sel" : ""} ${d.legal ? "" : "illegal"}`} onClick={() => onChange(d.id)} disabled={!d.legal}>
-          <span className="deck-name">
-            <ColorDots colors={d.colors} /> {d.name}
-          </span>
-          <span className="deck-meta">
-            {d.legends.map((s) => db?.bySlug.get(s)?.displayName ?? s).join(" · ")} — {d.size} cards
-            {d.source?.kind ? ` · ${d.source.kind}` : ""}
-          </span>
-        </button>
-      ))}
     </div>
   );
 }
@@ -68,7 +118,7 @@ export function Lobby() {
     setError(undefined);
     try {
       const legal = decks.filter((d) => d.legal);
-      const chosenBotDeck = botDeck === "__random" ? legal[Math.floor(Math.random() * legal.length)]!.id : botDeck;
+      const chosenBotDeck = botDeck === RANDOM ? legal[Math.floor(Math.random() * legal.length)]!.id : botDeck;
       try {
         localStorage.setItem(LS_KEY, JSON.stringify({ yourDeck, botDeck, bot }));
       } catch {
@@ -82,50 +132,47 @@ export function Lobby() {
     }
   }
 
+  const selectedBot = bots.find((b) => b.id === bot);
   return (
-    <div className="lobby">
-      <header className="lobby-head">
+    <div className="lobby compact">
+      <header className="lobby-top">
         <h1>
           CYBERPUNK <span>TCG</span> // AI
         </h1>
-        <p>Choose your deck, the bot's deck and the bot level.</p>
-        <a className="btn primary" href="#/builder">
+        <a className="btn" href="#/builder">
           Deck Builder
         </a>
       </header>
       {error && <div className="banner error">{error}</div>}
-      <div className="lobby-grid">
-        <section className="panel">
-          <h2 className="h-with-link">
-            Your deck
-            <a className="small" href={`#/builder/${yourDeck}`}>
-              Open in Deck Builder
-            </a>
-          </h2>
-          <DeckList decks={decks} db={db} value={yourDeck} onChange={setYourDeck} />
-        </section>
-        <section className="panel">
-          <h2>Bot deck</h2>
-          <DeckList decks={decks} db={db} value={botDeck} onChange={setBotDeck} allowRandom />
-        </section>
-        <section className="panel">
-          <h2>Bot level</h2>
-          <div className="bot-list">
+      <section className="panel lobby-card">
+        <div className="lobby-row">
+          <label>Your deck</label>
+          <DeckPicker decks={decks} db={db} value={yourDeck} onChange={setYourDeck} />
+          <a className="small edit-link" href={`#/builder/${yourDeck}`}>
+            Edit
+          </a>
+        </div>
+        <div className="lobby-row">
+          <label>Bot deck</label>
+          <DeckPicker decks={decks} db={db} value={botDeck} onChange={setBotDeck} allowRandom />
+          <span />
+        </div>
+        <div className="lobby-row">
+          <label>Bot level</label>
+          <div className="level-chips">
             {bots.map((b) => (
-              <button key={b.id} className={`bot-row ${bot === b.id ? "sel" : ""}`} onClick={() => setBot(b.id)}>
-                <span className="bot-name">
-                  {b.label} {!b.fair && <em className="tag warn">sees your cards</em>}
-                </span>
-                <span className="bot-desc">{b.description}</span>
+              <button key={b.id} className={`chip ${bot === b.id ? "sel" : ""} ${b.fair ? "" : "warn"}`} onClick={() => setBot(b.id)}>
+                {b.label}
               </button>
             ))}
           </div>
-          <button className="btn primary big" disabled={busy || !decks.length} onClick={start}>
-            {busy ? "Starting…" : "▶ Play"}
-          </button>
-          
-        </section>
-      </div>
+          <span />
+        </div>
+        {selectedBot && <p className="level-desc">{selectedBot.description}</p>}
+        <button className="btn primary big" disabled={busy || !decks.length} onClick={start}>
+          {busy ? "Starting…" : "▶ Play"}
+        </button>
+      </section>
     </div>
   );
 }
