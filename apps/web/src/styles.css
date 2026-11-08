@@ -398,3 +398,19 @@ a { color: var(--cyan); }
 .level-chips .chip.warn:not(.sel) { border-color: #5a1a2a; color: #ff8aa8; }
 .level-desc { margin: -4px 0 0 100px; color: var(--muted); font-size: 12.5px; }
 .lobby-card .btn.big { margin-top: 6px; }
+
+/* ---------- rooms (play with a friend) ---------- */
+.mode-tabs { display: flex; gap: 6px; }
+.mode-tabs .chip { padding: 6px 16px; font-size: 14px; }
+.room { max-width: 640px; margin: 0 auto; padding: 32px 16px; }
+.room h1 { font-size: 26px; letter-spacing: .08em; color: var(--yellow); margin: 0 0 14px; }
+.room h1 span { color: var(--cyan); }
+.room-card { display: flex; flex-direction: column; gap: 12px; padding: 18px; }
+.room-card h2 { margin: 0; }
+.invite { display: flex; gap: 6px; }
+.invite input { flex: 1; min-width: 0; background: #101014; color: var(--yellow); border: 1px solid var(--mat-line); border-radius: 4px; padding: 8px; font: 12px ui-monospace, Consolas, monospace; }
+.share-box { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.warn-text { color: #ff8aa8; }
+.spinner-line { color: var(--muted); }
+.deck-paste { min-height: 160px; background: #101014; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 8px; font: 12.5px ui-monospace, Consolas, monospace; width: 100%; }
+.paste-toggle { margin-left: 100px; }

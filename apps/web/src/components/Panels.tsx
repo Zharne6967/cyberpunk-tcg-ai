@@ -235,7 +235,7 @@ function PreventStealPicker({ s, send }: { s: GameStateMessage; send: Send }) {
   );
 }
 
-export function LogPanel({ log, onCard }: { log: LogLine[]; onCard: (definitionId: string) => void }) {
+export function LogPanel({ log, rivalName, onCard }: { log: LogLine[]; rivalName: string; onCard: (definitionId: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight });
@@ -246,7 +246,7 @@ export function LogPanel({ log, onCard }: { log: LogLine[]; onCard: (definitionI
       <div className="log" ref={ref}>
         {log.map((l) => (
           <div key={l.seq} className={`log-line ${l.actor}`}>
-            <span className="log-who">{l.actor === "you" ? "You" : l.actor === "bot" ? "Bot" : "•"}</span>
+            <span className="log-who">{l.actor === "you" ? "You" : l.actor === "rival" ? rivalName : "•"}</span>
             <span className="log-text">
               {l.text}
               {l.cards.map((c) => (

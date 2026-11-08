@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BotSummary, DeckSummary } from "@cpai/core/protocol";
-import { api, loadCardDb, type CardDb } from "../api.ts";
+import { api, loadCardDb, playerName, setPlayerName, type CardDb } from "../api.ts";
 
 const LS_KEY = "cpai.lobby.v1";
 const RANDOM = "__random";
@@ -24,7 +24,7 @@ function ColorDots({ colors }: { colors: string[] }) {
 }
 
 /** Compact deck picker: shows the chosen deck; opens a searchable list on click. */
-function DeckPicker({ decks, db, value, onChange, allowRandom }: { decks: DeckSummary[]; db?: CardDb; value: string; onChange: (id: string) => void; allowRandom?: boolean }) {
+export function DeckPicker({ decks, db, value, onChange, allowRandom }: { decks: DeckSummary[]; db?: CardDb; value: string; onChange: (id: string) => void; allowRandom?: boolean }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
@@ -106,6 +106,26 @@ export function Lobby() {
   const [bot, setBot] = useState(prefs.bot ?? "tactical");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [mode, setMode] = useState<"bot" | "friend">("bot");
+  const [name, setName] = useState(playerName());
+
+  async function createRoom() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      setPlayerName(name);
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify({ yourDeck, botDeck, bot }));
+      } catch {
+        /* private mode */
+      }
+      const { gameId } = await api.createRoom({ deckId: yourDeck, name: name.trim() || "Player 1" });
+      location.hash = `#/game/${gameId}`;
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     api.decks().then(setDecks).catch((e) => setError(String(e.message ?? e)));
@@ -124,7 +144,8 @@ export function Lobby() {
       } catch {
         /* private mode */
       }
-      const { gameId } = await api.newGame({ yourDeck, botDeck: chosenBotDeck, bot });
+      setPlayerName(name);
+      const { gameId } = await api.newGame({ yourDeck, botDeck: chosenBotDeck, bot, name: name.trim() || undefined });
       location.hash = `#/game/${gameId}`;
     } catch (e) {
       setError(String((e as Error).message ?? e));
@@ -145,6 +166,19 @@ export function Lobby() {
       </header>
       {error && <div className="banner error">{error}</div>}
       <section className="panel lobby-card">
+        <div className="mode-tabs">
+          <button className={`chip ${mode === "bot" ? "sel" : ""}`} onClick={() => setMode("bot")}>
+            vs Bot
+          </button>
+          <button className={`chip ${mode === "friend" ? "sel" : ""}`} onClick={() => setMode("friend")}>
+            vs Friend
+          </button>
+        </div>
+        <div className="lobby-row">
+          <label>Your name</label>
+          <input className="search" maxLength={24} value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+          <span />
+        </div>
         <div className="lobby-row">
           <label>Your deck</label>
           <DeckPicker decks={decks} db={db} value={yourDeck} onChange={setYourDeck} />
@@ -152,26 +186,34 @@ export function Lobby() {
             Edit
           </a>
         </div>
-        <div className="lobby-row">
-          <label>Bot deck</label>
-          <DeckPicker decks={decks} db={db} value={botDeck} onChange={setBotDeck} allowRandom />
-          <span />
-        </div>
-        <div className="lobby-row">
-          <label>Bot level</label>
-          <div className="level-chips">
-            {bots.map((b) => (
-              <button key={b.id} className={`chip ${bot === b.id ? "sel" : ""} ${b.fair ? "" : "warn"}`} onClick={() => setBot(b.id)}>
-                {b.label}
-              </button>
-            ))}
-          </div>
-          <span />
-        </div>
-        {selectedBot && <p className="level-desc">{selectedBot.description}</p>}
-        <button className="btn primary big" disabled={busy || !decks.length} onClick={start}>
-          {busy ? "Starting…" : "▶ Play"}
-        </button>
+        {mode === "bot" ? (
+          <>
+            <div className="lobby-row">
+              <label>Bot deck</label>
+              <DeckPicker decks={decks} db={db} value={botDeck} onChange={setBotDeck} allowRandom />
+              <span />
+            </div>
+            <div className="lobby-row">
+              <label>Bot level</label>
+              <div className="level-chips">
+                {bots.map((b) => (
+                  <button key={b.id} className={`chip ${bot === b.id ? "sel" : ""} ${b.fair ? "" : "warn"}`} onClick={() => setBot(b.id)}>
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+              <span />
+            </div>
+            {selectedBot && <p className="level-desc">{selectedBot.description}</p>}
+            <button className="btn primary big" disabled={busy || !decks.length} onClick={start}>
+              {busy ? "Starting…" : "▶ Play"}
+            </button>
+          </>
+        ) : (
+          <button className="btn primary big" disabled={busy || !decks.length} onClick={createRoom}>
+            {busy ? "Creating…" : "Create room"}
+          </button>
+        )}
       </section>
     </div>
   );

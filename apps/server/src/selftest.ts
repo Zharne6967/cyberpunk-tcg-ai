@@ -1,10 +1,12 @@
 /**
- * Headless end-to-end check: starts the server in-process, creates games over HTTP and plays the human
- * side over WebSocket with random legal actions until each game ends.
- *   pnpm --filter @cpai/server selftest [games] [bot]
+ * Headless end-to-end check: starts the server in-process, creates games over HTTP and plays human
+ * seats over WebSocket with random legal actions (half of them sent as table gestures) until each
+ * game ends.
+ *   pnpm selftest [games] [bot]       games vs the bot
+ *   pnpm selftest [games] friend      friend rooms: two humans join by invite link and play each other
  */
 import { WebSocket } from "ws";
-import type { GameStateMessage, Intent, ServerMessage, UiAction } from "@cpai/core/protocol";
+import type { GameStateMessage, Intent, SeatTicket, ServerMessage, UiAction } from "@cpai/core/protocol";
 
 process.env.PORT ??= "5199";
 await import("./main.ts");
@@ -45,35 +47,36 @@ function intentFor(a: UiAction): Intent | null {
 
 let intents = 0;
 let intentOptions = 0;
+const post = async <T>(path: string, body: unknown): Promise<T> => {
+  const r = await fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = (await r.json()) as T & { error?: string };
+  if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+  return j;
+};
 
-async function playOne(i: number) {
-  const decks = (await (await fetch(`${base}/api/decks`)).json()) as { id: string; legal: boolean }[];
-  const legal = decks.filter((d) => d.legal);
-  const yourDeck = legal[i % legal.length]!.id;
-  const botDeck = legal[(i * 7 + 3) % legal.length]!.id;
-  const { gameId } = (await (await fetch(`${base}/api/games`, { method: "POST", body: JSON.stringify({ yourDeck, botDeck, bot, seed: `selftest-${i}` }) })).json()) as { gameId: string };
-  const ws = new WebSocket(`ws://127.0.0.1:${process.env.PORT}/ws?game=${gameId}`);
-  let humanMoves = 0;
+/** Play one seat (identified by its token) with random legal moves until the game ends. */
+function playSeat(gameId: string, token: string, label: string): Promise<{ last: GameStateMessage; moves: number; errors: number; choices: Set<string> }> {
+  const ws = new WebSocket(`ws://127.0.0.1:${process.env.PORT}/ws?game=${gameId}&token=${encodeURIComponent(token)}`);
+  let moves = 0;
   let errors = 0;
-  const seenChoices = new Set<string>();
-  const last = await new Promise<GameStateMessage>((resolve, reject) => {
+  const choices = new Set<string>();
+  return new Promise((resolve, reject) => {
     let lastSent = -1;
     let lastMsg: GameStateMessage | undefined;
     const timer = setTimeout(() => {
       const m = lastMsg;
-      const info = m ? `sid=${m.view.stateID} phase=${m.view.gamePhase} turn=${m.view.turnNumber} active=${m.view.activePlayerId} status=${m.promptStatus} bot=${m.botThinking} choice=${m.choice?.type ?? "-"} ${JSON.stringify(m.choice?.payload ?? {}).slice(0, 300)} actions=${JSON.stringify(m.actions).slice(0, 400)} attack=${JSON.stringify(m.view.attackState)} log=${m.log.slice(-3).map((l) => l.text).join(" | ")}` : "no state";
-      reject(new Error(`game ${gameId} timed out: ${info}`));
+      const info = m ? `sid=${m.view.stateID} phase=${m.view.gamePhase} turn=${m.view.turnNumber} active=${m.view.activePlayerId} status=${m.promptStatus} choice=${m.choice?.type ?? "-"} actions=${JSON.stringify(m.actions).slice(0, 400)} log=${m.log.slice(-3).map((l) => l.text).join(" | ")}` : "no state";
+      reject(new Error(`${label} ${gameId} timed out: ${info}`));
     }, Number(process.env.SELFTEST_TIMEOUT ?? 120_000));
     ws.on("open", () => ws.send(JSON.stringify({ type: "setBotSpeed", ms: 0 })));
     ws.on("message", (raw) => {
       const msg = JSON.parse(String(raw)) as ServerMessage;
       if (msg.type === "error") {
         errors++;
-        if (!msg.message.includes("changed") && !msg.message.includes("not your turn")) console.log(`  [${gameId}] error: ${msg.message}`);
+        if (!msg.message.includes("changed") && !msg.message.includes("not your turn")) console.log(`  [${gameId} ${label}] error: ${msg.message}`);
         return;
       }
       if (msg.type === "options") {
-        // The table gesture fit several legal moves: pick one like a player would.
         const o = msg.options[Math.floor(Math.random() * msg.options.length)]!;
         intentOptions++;
         ws.send(JSON.stringify({ type: "action", actionId: o.id, stateID: lastMsg!.view.stateID }));
@@ -83,18 +86,17 @@ async function playOne(i: number) {
       lastMsg = msg;
       if (msg.result) {
         clearTimeout(timer);
-        resolve(msg);
+        ws.close();
+        resolve({ last: msg, moves, errors, choices });
         return;
       }
-      if (msg.choice) seenChoices.add(msg.choice.type);
-      if ((msg.promptStatus === "action" || msg.promptStatus === "choice") && !msg.botThinking && msg.actions.length && lastSent !== msg.view.stateID) {
+      if (msg.choice) choices.add(msg.choice.type);
+      if ((msg.promptStatus === "action" || msg.promptStatus === "choice") && !msg.rivalThinking && msg.actions.length && lastSent !== msg.view.stateID) {
         lastSent = msg.view.stateID;
-        // Mostly sensible random play: prefer non-pass actions 70% of the time.
         const nonPass = msg.actions.filter((a) => a.move !== "passPhase");
         const pool = nonPass.length && Math.random() < 0.7 ? nonPass : msg.actions;
         const a = pool[Math.floor(Math.random() * pool.length)]!;
-        humanMoves++;
-        // Half of the time send the table gesture (drag & drop / click) instead of the exact action.
+        moves++;
         const intent = Math.random() < 0.5 ? intentFor(a) : null;
         if (intent) {
           intents++;
@@ -104,11 +106,32 @@ async function playOne(i: number) {
     });
     ws.on("error", reject);
   });
-  ws.close();
-  console.log(
-    `game ${i + 1} (${gameId}): ${yourDeck} vs ${botDeck} → ${last.result!.winner} (${last.result!.reason}), tur ${last.view.turnNumber}, ruchów człowieka ${humanMoves}, log ${last.log.length} linii, błędy ${errors}, wybory: ${[...seenChoices].join(",") || "-"}`,
-  );
-  return last;
+}
+
+async function playOne(i: number) {
+  const decks = (await (await fetch(`${base}/api/decks`)).json()) as { id: string; legal: boolean }[];
+  const legal = decks.filter((d) => d.legal);
+  const yourDeck = legal[i % legal.length]!.id;
+  const otherDeck = legal[(i * 7 + 3) % legal.length]!.id;
+  if (bot === "friend") {
+    // Host opens a room, the friend joins through the invite (the friend's deck is pasted as text).
+    const host = await post<SeatTicket>("/api/rooms", { deckId: yourDeck, name: "Host" });
+    const otherList = (await post<{ text: string }>("/api/decks/check", { deck: await (await fetch(`${base}/api/decks/${otherDeck}`)).json() })).text;
+    const info = (await (await fetch(`${base}/api/rooms/${host.gameId}?invite=${host.invite}`)).json()) as { status: string };
+    if (info.status !== "waiting") throw new Error(`room status ${info.status}`);
+    const hostRun = playSeat(host.gameId, host.token, "host");
+    const guest = await post<SeatTicket>(`/api/rooms/${host.gameId}/join`, { invite: host.invite, deckText: otherList, name: "Guest" });
+    // A wrong invite must not let anyone in.
+    const bad = await fetch(`${base}/api/rooms/${host.gameId}/join`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ invite: "nope", deckId: yourDeck }) });
+    if (bad.ok) throw new Error("joined with a wrong invite");
+    const [h, g] = await Promise.all([hostRun, playSeat(guest.gameId, guest.token, "guest")]);
+    if ((h.last.result!.winner === "you") === (g.last.result!.winner === "you") && h.last.result!.winner !== "draw") throw new Error("both seats report the same winner");
+    console.log(`friend game ${i + 1} (${host.gameId}): ${yourDeck} vs ${otherDeck} → host ${h.last.result!.winner} (${h.last.result!.reason}), turn ${h.last.view.turnNumber}, moves ${h.moves}+${g.moves}, errors ${h.errors}+${g.errors}, choices: ${[...new Set([...h.choices, ...g.choices])].join(",") || "-"}`);
+    return;
+  }
+  const t = await post<SeatTicket>("/api/games", { yourDeck, botDeck: otherDeck, bot, seed: `selftest-${i}` });
+  const r = await playSeat(t.gameId, t.token, "human");
+  console.log(`game ${i + 1} (${t.gameId}): ${yourDeck} vs ${otherDeck} → ${r.last.result!.winner} (${r.last.result!.reason}), turn ${r.last.view.turnNumber}, moves ${r.moves}, log ${r.last.log.length}, errors ${r.errors}, choices: ${[...r.choices].join(",") || "-"}`);
 }
 
 let failed = 0;
@@ -121,5 +144,5 @@ for (let i = 0; i < nGames; i++) {
   }
 }
 console.log(`intents: ${intents} (options dialogs: ${intentOptions})`);
-console.log(failed ? `SELFTEST: ${failed} nieudanych` : "SELFTEST OK");
+console.log(failed ? `SELFTEST: ${failed} failed` : "SELFTEST OK");
 process.exit(failed ? 1 : 0);

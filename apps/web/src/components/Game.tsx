@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CardView, ClientMessage, GameStateMessage, Intent, ServerMessage, UiAction } from "@cpai/core/protocol";
-import { api, loadCardDb, type CardDb } from "../api.ts";
+import type { CardView, ClientMessage, GameStateMessage, Intent, ServerMessage, UiAction, WaitingMessage } from "@cpai/core/protocol";
+import { api, loadCardDb, seatTicket, type CardDb } from "../api.ts";
+import { WaitingRoom } from "./Rooms.tsx";
 import { GigArea, Mat, RivalHand, Strip, YourHand, cardData, type BoardCtx } from "./Board.tsx";
 import { ActionPanel, DecisionPanel, Inspector, LogPanel, OptionsModal, TrashModal, phaseText } from "./Panels.tsx";
 
@@ -23,25 +24,31 @@ type Options = { title: string; options: { id: string; label: string }[] };
 
 function useGameSocket(gameId: string) {
   const [state, setState] = useState<GameStateMessage>();
+  const [waiting, setWaiting] = useState<WaitingMessage | null>(null);
   const [toast, setToast] = useState<string>();
   const [options, setOptions] = useState<Options | null>(null);
-  const [conn, setConn] = useState<"connecting" | "open" | "closed" | "missing">("connecting");
+  const ticket = useMemo(() => seatTicket(gameId), [gameId]);
+  const [conn, setConn] = useState<"connecting" | "open" | "closed" | "missing" | "noseat">(ticket ? "connecting" : "noseat");
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    if (!ticket) return;
     let stop = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const connect = () => {
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(`${proto}://${location.host}/ws?game=${gameId}`);
+      // The seat token decides which side of the table (and which hidden cards) this browser sees.
+      const ws = new WebSocket(`${proto}://${location.host}/ws?game=${gameId}&token=${encodeURIComponent(ticket.token)}`);
       wsRef.current = ws;
       ws.onopen = () => setConn("open");
       ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data) as ServerMessage;
         if (msg.type === "state") {
           setState(msg);
+          setWaiting(null);
           setOptions(null);
-        } else if (msg.type === "options") setOptions({ title: msg.title, options: msg.options });
+        } else if (msg.type === "waiting") setWaiting(msg);
+        else if (msg.type === "options") setOptions({ title: msg.title, options: msg.options });
         else setToast(msg.message);
       };
       ws.onclose = () => {
@@ -59,7 +66,7 @@ function useGameSocket(gameId: string) {
       clearTimeout(retry);
       wsRef.current?.close();
     };
-  }, [gameId]);
+  }, [gameId, ticket]);
 
   useEffect(() => {
     if (!toast) return;
@@ -68,7 +75,7 @@ function useGameSocket(gameId: string) {
   }, [toast]);
 
   const send = useCallback((msg: ClientMessage) => wsRef.current?.readyState === WebSocket.OPEN && wsRef.current.send(JSON.stringify(msg)), []);
-  return { state, toast, options, setOptions, conn, send };
+  return { state, waiting, ticket, toast, options, setOptions, conn, send };
 }
 
 /** Start of the game: CR 7.5 (a random player decides who goes first) and the opening hand. */
@@ -77,7 +84,7 @@ function SetupDialog({ state, onAction }: { state: GameStateMessage; onAction: (
   if (state.view.gamePhase !== "setup") return null;
   const first = state.actions.filter((a) => a.move === "resolveFirstPlayer");
   const hand = state.actions.filter((a) => a.move === "keepHand" || a.move === "mulligan");
-  const botChoice = state.log.find((l) => l.actor === "bot" && l.key === "setup.firstPlayerChoice");
+  const botChoice = state.log.find((l) => l.actor === "rival" && l.key === "setup.firstPlayerChoice");
   let body: import("react").ReactNode = null;
   if (first.length) {
     body = (
@@ -97,7 +104,7 @@ function SetupDialog({ state, onAction }: { state: GameStateMessage; onAction: (
     body = (
       <>
         <h2>First player</h2>
-        <p>The bot was chosen at random. Bot: {botChoice.text}</p>
+        <p>{state.rivalLabel} was chosen at random: {botChoice.text}</p>
         <div className="row">
           <button className="btn primary" onClick={() => setBotNoticeClosed(true)}>
             OK
@@ -109,7 +116,7 @@ function SetupDialog({ state, onAction }: { state: GameStateMessage; onAction: (
     body = (
       <>
         <h2>Opening hand</h2>
-        {botChoice && <p className="small muted">Bot: {botChoice.text}</p>}
+        {botChoice && <p className="small muted">{state.rivalLabel}: {botChoice.text}</p>}
         <div className="row">
           {hand.map((a) => (
             <button key={a.id} className={`btn ${a.move === "keepHand" ? "primary" : ""}`} onClick={() => onAction(a)}>
@@ -172,7 +179,7 @@ function ownerOf(s: GameStateMessage, id: string): string | undefined {
 }
 
 export function Game({ gameId }: { gameId: string }) {
-  const { state, toast, options, setOptions, conn, send } = useGameSocket(gameId);
+  const { state, waiting, ticket, toast, options, setOptions, conn, send } = useGameSocket(gameId);
   const [db, setDb] = useState<CardDb>();
   const [menu, setMenu] = useState<{ card: CardView; items: MenuItem[]; x: number; y: number } | null>(null);
   const [inspect, setInspect] = useState<{ definitionId: string; live?: CardView } | null>(null);
@@ -257,15 +264,16 @@ export function Game({ gameId }: { gameId: string }) {
     return () => window.removeEventListener("keydown", k);
   }, [state, sendIntent, inspect, trashSeat]);
 
-  if (conn === "missing")
+  if (conn === "missing" || conn === "noseat")
     return (
       <div className="center-msg">
-        <p>This game no longer exists (the server was restarted).</p>
+        <p>{conn === "missing" ? "This game no longer exists (the server was restarted)." : "You are not a player in this game."}</p>
         <a className="btn primary" href="#/">
           Back to lobby
         </a>
       </div>
     );
+  if (waiting && ticket) return <WaitingRoom gameId={gameId} invite={ticket.invite} hostDeck={waiting.hostDeck} />;
   if (!state || !db) return <div className="center-msg">Connecting…</div>;
 
   const choosing = !!state.choice && state.view.gamePhase !== "setup";
@@ -309,7 +317,7 @@ export function Game({ gameId }: { gameId: string }) {
     highlight: new Set([...hover, ...(menu ? [menu.card.instanceId] : []), ...(targeting ? [targeting.attackerId] : [])]),
     onCardClick: (card, anchor) => {
       if (targeting) {
-        if (ownerOf(state, card.instanceId) === state.bot && card.zone === "field") sendIntent({ kind: "attack", cardId: targeting.attackerId, targetId: card.instanceId });
+        if (ownerOf(state, card.instanceId) === state.rival && card.zone === "field") sendIntent({ kind: "attack", cardId: targeting.attackerId, targetId: card.instanceId });
         else setTargeting(null);
         return;
       }
@@ -321,7 +329,7 @@ export function Game({ gameId }: { gameId: string }) {
       setMenu({ card, items, x: Math.min(r.left, window.innerWidth - 240), y: Math.min(r.bottom + 4, window.innerHeight - 40 * items.length - 20) });
     },
     onGigAreaClick: (seat) => {
-      if (targeting && seat === state.bot) sendIntent({ kind: "attack", cardId: targeting.attackerId, targetId: "rival" });
+      if (targeting && seat === state.rival) sendIntent({ kind: "attack", cardId: targeting.attackerId, targetId: "rival" });
     },
     onInspect: view,
     onIntent: sendIntent,
@@ -339,7 +347,7 @@ export function Game({ gameId }: { gameId: string }) {
           CYBERPUNK <span>TCG</span> // AI
         </a>
         <span className="vs">
-          {state.yourDeck} <b>vs</b> {state.botDeck} <span className="muted">({state.botLabel})</span>
+          {state.yourDeck} <b>vs</b> {state.rivalDeck} <span className="muted">({state.rivalLabel})</span>
         </span>
         <span className="spacer" />
         <label className="opt">
@@ -372,7 +380,7 @@ export function Game({ gameId }: { gameId: string }) {
           />{" "}
           Win chance
         </label>
-        <label className="opt">
+        <label className="opt" hidden={state.mode !== "bot"}>
           Bot speed{" "}
           <select
             value={speed}
@@ -404,13 +412,13 @@ export function Game({ gameId }: { gameId: string }) {
       <div className="table-wrap">
         <div className="tabletop">
           <RivalHand ctx={ctx} />
-          <Mat seat={state.bot} ctx={ctx} rival />
+          <Mat seat={state.rival} ctx={ctx} rival />
           <Strip>
-            <GigArea seat={state.bot} ctx={ctx} label="RIVAL GIGS" rival />
+            <GigArea seat={state.rival} ctx={ctx} label="RIVAL GIGS" rival />
             <div className={`phase-box ${state.view.activePlayerId === state.you ? "you" : "bot"}`}>
               <div className="phase-text">
                 {phaseText(state)}
-                {state.botThinking && <span className="dots" />}
+                {state.rivalThinking && <span className="dots" />}
               </div>
               {showChance && state.winChance != null && <WinChanceBar you={state.winChance} />}
               {!state.result && state.view.gamePhase !== "setup" && (
@@ -425,7 +433,7 @@ export function Game({ gameId }: { gameId: string }) {
           <YourHand ctx={ctx} />
         </div>
         <aside className="sidebar">
-          <LogPanel log={state.log} onCard={(definitionId) => setInspect({ definitionId })} />
+          <LogPanel log={state.log} rivalName={state.rivalLabel} onCard={(definitionId) => setInspect({ definitionId })} />
           <DecisionPanel s={state} db={db} send={sendCommand} sendAction={sendAction} onHover={setHover} />
           {hints && <ActionPanel s={state} sendAction={sendAction} onHover={setHover} />}
         </aside>
@@ -467,7 +475,7 @@ export function Game({ gameId }: { gameId: string }) {
       {state.result && !hideResult && (
         <div className="result-overlay">
           <div className={`result ${state.result.winner}`}>
-            <h2>{state.result.winner === "you" ? "YOU WIN" : state.result.winner === "bot" ? "YOU LOSE" : "DRAW"}</h2>
+            <h2>{state.result.winner === "you" ? "YOU WIN" : state.result.winner === "rival" ? "YOU LOSE" : "DRAW"}</h2>
             <p>
               {RESULT_REASON[state.result.reason ?? ""] ?? state.result.reason ?? ""} · Turn {state.view.turnNumber}
             </p>

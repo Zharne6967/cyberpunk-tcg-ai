@@ -71,7 +71,7 @@ export interface UiAction {
 export interface LogLine {
   seq: number;
   turn: number;
-  actor: "you" | "bot" | "system";
+  actor: "you" | "rival" | "system";
   text: string;
   /** Public cards mentioned in the line (clickable in the UI). */
   cards: { instanceId: string; definitionId: string }[];
@@ -88,24 +88,38 @@ export interface ChoiceView {
 export interface GameStateMessage {
   type: "state";
   gameId: string;
+  /** Against the bot, or against a friend (two humans). */
+  mode: "bot" | "friend";
   you: Seat;
-  bot: Seat;
-  botLabel: string;
+  rival: Seat;
+  yourName: string;
+  /** Bot level or the friend's name. */
+  rivalLabel: string;
   yourDeck: string;
-  botDeck: string;
+  rivalDeck: string;
   view: MatchView;
   promptStatus: "idle" | "action" | "choice" | "waiting";
   choice: ChoiceView | null;
   actions: UiAction[];
   log: LogLine[];
-  botThinking: boolean;
-  /** Instance ids the bot touched in its latest action (for highlighting). */
-  botLastCardIds: string[];
+  /** The bot is computing its move. */
+  rivalThinking: boolean;
+  /** Instance ids the rival touched in their latest action (for highlighting). */
+  rivalLastCardIds: string[];
   /** Your chance to win (0..1) from public table information only (learned model), null in setup. */
   winChance: number | null;
   /** Last ISMCTS search of the bot: simulations run and its estimated chance to win. */
   botInfo: null | { iterations: number; winRate: number; ms: number };
-  result: null | { winner: "you" | "bot" | "draw"; reason: string | null };
+  result: null | { winner: "you" | "rival" | "draw"; reason: string | null };
+}
+
+/** Friend room before the second player joined. */
+export interface WaitingMessage {
+  type: "waiting";
+  gameId: string;
+  you: Seat;
+  hostName: string;
+  hostDeck: string;
 }
 
 /**
@@ -125,6 +139,7 @@ export type Intent =
 
 export type ServerMessage =
   | GameStateMessage
+  | WaitingMessage
   | { type: "error"; message: string }
   | { type: "toast"; message: string }
   | { type: "options"; title: string; options: { id: string; label: string }[] };
@@ -179,4 +194,33 @@ export interface NewGameRequest {
   botDeck: string;
   bot: string;
   seed?: string;
+  name?: string;
+}
+
+/** Response of POST /api/games, /api/rooms and /api/rooms/:id/join: your seat's secret. */
+export interface SeatTicket {
+  gameId: string;
+  token: string;
+  /** Friend rooms (host only): the code for the invite link. */
+  invite?: string;
+}
+
+/** GET /api/rooms/:id?invite=… — what the invited player sees before joining. */
+export interface RoomInfo {
+  gameId: string;
+  status: "waiting" | "started";
+  hostName: string;
+  hostDeck: string;
+}
+
+/** GET /api/share — internet sharing (Cloudflare quick tunnel) status. */
+export interface ShareInfo {
+  active: boolean;
+  /** Public https URL of this server while sharing. */
+  url: string | null;
+  /** Access key remote visitors need (part of every shared link). */
+  key: string;
+  /** cloudflared found on this computer. */
+  available: boolean;
+  error?: string;
 }

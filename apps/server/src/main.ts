@@ -3,11 +3,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, join, normalize } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { STRATEGIES } from "@cpai/ai";
-import type { BotSummary, ClientMessage, NewGameRequest } from "@cpai/core/protocol";
+import { checkDeckLegality, isDeckLegal, type Deck } from "@cpai/core";
+import type { BotSummary, ClientMessage, NewGameRequest, RoomInfo, SeatTicket } from "@cpai/core/protocol";
 import { checkDeck, deleteUserDeck, getDeck, importDeckText, isUserDeck, loadAllDecks, sanitizeDeck, saveUserDeck, summarizeDeck } from "./decks.ts";
 import { botPool } from "./bot-pool.ts";
 import { GameSession, games } from "./game.ts";
 import { getCardImage } from "./images.ts";
+import { isAuthorized, isRemote, keyLogin, shareStatus, startShare, stopShare } from "./share.ts";
 import { DATA_DIR, WEB_DIST } from "./paths.ts";
 
 const PORT = Number(process.env.PORT ?? 5177);
@@ -56,11 +58,47 @@ function serveStatic(req: IncomingMessage, res: ServerResponse) {
 
 let cardsJson: string | undefined;
 
+/** An error caused by the request (shown to the player), not by the server. */
+class UserError extends Error {}
+
+/** A deck chosen by id, or pasted as a text list (friends can bring their own list). */
+function playerDeck(body: { deckId?: string; deckText?: string; deckName?: string }): Deck {
+  if (body.deckText && body.deckText.trim()) {
+    const { deck, unresolved } = importDeckText(body.deckText, body.deckName);
+    if (unresolved.length) throw new UserError(`Unknown cards: ${unresolved.map((u) => u.name).join(", ")}`);
+    if (!isDeckLegal(deck)) throw new UserError(`The deck is not legal: ${checkDeckLegality(deck).filter((p) => p.severity === "error").map((p) => p.message).join("; ")}`);
+    return deck;
+  }
+  const deck = body.deckId ? getDeck(body.deckId) : undefined;
+  if (!deck) throw new UserError("Choose a deck");
+  if (!isDeckLegal(deck)) throw new UserError("The deck is not legal");
+  return deck;
+}
+
+const ticket = (g: GameSession, seat: "p1" | "p2", withInvite = false): SeatTicket => ({ gameId: g.id, token: g.seats[seat].token, ...(withInvite && g.invite ? { invite: g.invite } : {}) });
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", "http://x");
     const p = url.pathname;
+    // ---- access from other devices / the internet needs the key (shared links carry it once)
+    if (!isAuthorized(req)) {
+      const login = keyLogin(req, url);
+      if (login) {
+        res.writeHead(302, { "set-cookie": login.cookie, location: login.location || "/", "cache-control": "no-store" });
+        return res.end();
+      }
+      if (p.startsWith("/api/") || p.startsWith("/img/")) return sendJson(res, 403, { error: "Access key required" });
+      res.writeHead(403, { "content-type": "text/html; charset=utf-8" });
+      return res.end("<!doctype html><meta name=viewport content='width=device-width'><body style='background:#000;color:#f5e600;font:16px sans-serif;padding:24px'>Cyberpunk TCG AI: open the full link you received (it contains the access key).</body>");
+    }
+    const local = !isRemote(req);
     if (p === "/api/health") return sendJson(res, 200, { ok: true });
+    // ---- sharing over the internet (only from this computer)
+    // Everyone who got this far is authorized (has the key or is on this computer).
+    if (p === "/api/share" && req.method === "GET") return sendJson(res, 200, shareStatus());
+    if (p === "/api/share/start" && req.method === "POST") return local ? sendJson(res, 200, await startShare(PORT)) : sendJson(res, 403, { error: "Only on the host computer" });
+    if (p === "/api/share/stop" && req.method === "POST") return local ? sendJson(res, 200, stopShare()) : sendJson(res, 403, { error: "Only on the host computer" });
     if (p === "/api/cards") {
       cardsJson ??= readFileSync(join(DATA_DIR, "cards.json"), "utf8");
       res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" });
@@ -75,6 +113,9 @@ const server = createServer(async (req, res) => {
     if (p === "/api/decks/import" && req.method === "POST") {
       const body = (await readBody(req)) as { text?: string; name?: string };
       return sendJson(res, 200, importDeckText(String(body.text ?? ""), body.name));
+    }
+    if (p.startsWith("/api/decks/") && (req.method === "PUT" || req.method === "DELETE") && !local) {
+      return sendJson(res, 403, { error: "Decks can only be saved or deleted on the host computer" });
     }
     if (p.startsWith("/api/decks/") && req.method === "PUT") {
       const deck = sanitizeDeck({ ...((await readBody(req)) as object), id: decodeURIComponent(p.slice("/api/decks/".length)) });
@@ -102,13 +143,41 @@ const server = createServer(async (req, res) => {
       const you = getDeck(body.yourDeck);
       const bot = getDeck(body.botDeck);
       if (!you || !bot) return sendJson(res, 400, { error: "Choose both decks" });
-      const game = new GameSession(you, bot, body.bot ?? "tactical", body.seed);
+      const game = GameSession.vsBot(you, bot, body.bot ?? "tactical", body.seed, body.name?.trim() || "You");
       games.set(game.id, game);
-      return sendJson(res, 200, { gameId: game.id });
+      return sendJson(res, 200, ticket(game, "p1"));
     }
     if (p.startsWith("/api/games/") && req.method === "GET") {
       const g = games.get(p.slice("/api/games/".length));
-      return g ? sendJson(res, 200, { gameId: g.id }) : sendJson(res, 404, { error: "Game not found (was the server restarted?)" });
+      return g ? sendJson(res, 200, { gameId: g.id, mode: g.mode, started: g.started }) : sendJson(res, 404, { error: "Game not found (was the server restarted?)" });
+    }
+    // ---- friend rooms
+    if (p === "/api/rooms" && req.method === "POST") {
+      const body = (await readBody(req)) as { deckId?: string; deckText?: string; name?: string };
+      const game = GameSession.friendRoom(playerDeck(body), body.name?.trim() || "Player 1");
+      games.set(game.id, game);
+      return sendJson(res, 200, ticket(game, "p1", true));
+    }
+    const room = /^\/api\/rooms\/([\w-]+)(\/join)?$/.exec(p);
+    if (room) {
+      const g = games.get(room[1]!);
+      const invite = url.searchParams.get("invite");
+      if (!g || g.mode !== "friend") return sendJson(res, 404, { error: "Room not found (was the server restarted?)" });
+      if (!room[2] && req.method === "GET") {
+        if (invite !== g.invite) return sendJson(res, 403, { error: "This invite link is not valid." });
+        const info: RoomInfo = { gameId: g.id, status: g.started ? "started" : "waiting", hostName: g.seats.p1.name, hostDeck: g.seats.p1.deck?.name ?? "" };
+        return sendJson(res, 200, info);
+      }
+      if (room[2] && req.method === "POST") {
+        const body = (await readBody(req)) as { invite?: string; deckId?: string; deckText?: string; name?: string };
+        let token: string;
+        try {
+          token = g.join(String(body.invite ?? ""), playerDeck(body), String(body.name ?? ""));
+        } catch (e) {
+          throw new UserError((e as Error).message);
+        }
+        return sendJson(res, 200, { gameId: g.id, token } satisfies SeatTicket);
+      }
     }
     if (p.startsWith("/img/")) {
       const key = decodeURIComponent(p.slice(5)).replace(/\.webp$/, "");
@@ -123,19 +192,23 @@ const server = createServer(async (req, res) => {
     if (p.startsWith("/api/")) return sendJson(res, 404, { error: "Unknown API path" });
     return serveStatic(req, res);
   } catch (err) {
-    console.error(err);
-    if (!res.headersSent) sendJson(res, 500, { error: String((err as Error).message ?? err) });
+    // Player mistakes (bad invite, illegal deck…) are 400s; anything else is a server bug.
+    const expected = err instanceof UserError;
+    if (!expected) console.error(err);
+    if (!res.headersSent) sendJson(res, expected ? 400 : 500, { error: String((err as Error).message ?? err) });
   }
 });
 
 const wss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "/", "http://x");
-  if (url.pathname !== "/ws") return socket.destroy();
+  if (url.pathname !== "/ws" || !isAuthorized(req)) return socket.destroy();
   const game = games.get(url.searchParams.get("game") ?? "");
-  if (!game) return socket.destroy();
+  // Only the players of this game: the token decides which seat (and so which cards) you see.
+  const seat = game?.seatForToken(url.searchParams.get("token"));
+  if (!game || !seat) return socket.destroy();
   wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
-    const unsubscribe = game.subscribe((msg) => {
+    const unsubscribe = game.subscribe(seat, (msg) => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
     });
     ws.on("message", (data) => {
@@ -145,11 +218,11 @@ server.on("upgrade", (req, socket, head) => {
       } catch {
         return;
       }
-      if (msg.type === "action") game.handleAction(msg.actionId, msg.stateID);
-      else if (msg.type === "command") game.handleCommand(msg.move, msg.args, msg.stateID);
-      else if (msg.type === "intent") game.handleIntent(msg.intent, msg.stateID);
-      else if (msg.type === "setBotSpeed") game.botDelayMs = Math.max(0, Math.min(5000, Number(msg.ms) || 0));
-      else if (msg.type === "concede") game.concede();
+      if (msg.type === "action") game.handleAction(seat, msg.actionId, msg.stateID);
+      else if (msg.type === "command") game.handleCommand(seat, msg.move, msg.args, msg.stateID);
+      else if (msg.type === "intent") game.handleIntent(seat, msg.intent, msg.stateID);
+      else if (msg.type === "setBotSpeed" && game.mode === "bot") game.botDelayMs = Math.max(0, Math.min(5000, Number(msg.ms) || 0));
+      else if (msg.type === "concede") game.concede(seat);
     });
     ws.on("close", unsubscribe);
   });
