@@ -53,6 +53,16 @@ Do zrobienia w etapie 4:
 - wybór celów efektów kliknięciem na stole z lepszą informacją zwrotną; Scry jako przeciąganie kart;
 - ręczny test całej partii przez gracza i poprawki z jego uwag.
 
+## Prośby gracza (2026-11-08) — do rozplanowania na początku następnej sesji
+- **AI tworzy talie samo, na bazie mety**: import najczęściej granych talii (etap 7: tcgcontender, ripperdeck,
+  choombattler/meta, exburst), regularne odświeżanie; AI ulepsza je (podmiany kart sprawdzane tysiącami
+  symulacji, etap 8) i pisze przewodnik „jak na nią grać / jak ją kontrować” (łączy się z 5c).
+- **Wtyczka do przeglądarki (trener)**: czyta stan gry z symulatora online (np. choombattler.com /
+  cyberpunk-tcg-sim.online) i pokazuje najlepsze zagranie + wyjaśnienie, liczone naszym uczciwym botem
+  (tylko informacje widoczne dla gracza). Ograniczenie: **tylko tryby treningowe / gry z botem** — podpowiadanie
+  w meczach z ludźmi (ranked, turnieje) to oszukiwanie i łamie regulaminy tych stron; wtyczka ma to blokować.
+  Ryzyko techniczne: odczyt stanu z cudzej strony (DOM/WebSocket) bywa kruchy przy jej zmianach.
+
 ## Etap 5c — Analiza talii rywala i kontr-talia (prośba gracza, plan)
 Wklejasz talię (lista/ID) → raport: (1) słabości — krzywa, Eddies/sprzedaż, RAM, zależność od kluczowych
 kart, wyniki symulacji vs pula talii (`pnpm bench` po stronie serwera, ISMCTS), w których dopasowaniach przegrywa
