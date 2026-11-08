@@ -41,7 +41,8 @@ commit: `6de59de1c203827edc1bc6faa1bc6184cd126a5f`
    `processCommand`, without undo patches / move logs / animation / clock) for ISMCTS simulations;
    exported from `command/index.ts` and `src/index.ts`. Never used for the authoritative game.
 8. `cyberpunk-engine/src/view/filter.ts`: face-down Legends are hidden from their owner too
-   (CR 5.7.4.1; only `meta.revealed` from a "look at" effect shows them), also as effect sources.
+   (CR 5.7.4.1; only `meta.revealed` from a "look at" effect shows them), also as effect sources, and
+   every Legend is hidden during setup (CR 4.3 / 7.7: placed face-down in random order).
    Test `tests/comprehensive-rules/cr-gigs-hidden.test.ts` updated to assert the rule.
 9. Tests adjusted to patch 8 / Windows:
    - `cyberpunk-ai-runner/tests/curve-prompt-lines.test.ts`: 5 tests skipped (`test.skip`, comment in place) —

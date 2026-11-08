@@ -1,4 +1,10 @@
-# Wdrożenie w internecie (darmowe, prywatne repo)
+# Wdrożenie w internecie (darmowe)
+
+**Działa od 2026-11-09:**
+- strona dla graczy (zawsze włączona, budzi serwer): **https://cyberpunk-tcg-ai.onrender.com**
+- serwer gry (Render Free, usypia): https://cyberpunk-tcg-ai-server.onrender.com
+- kod: https://github.com/Zharne6967/cyberpunk-tcg-ai (publiczne repo) — Render wdraża każdy `git push` na `main`
+  sam (Auto-Deploy), panel: https://dashboard.render.com (Blueprint `cyberpunk-tcg-ai`).
 
 Cel: strona dostępna zawsze, dla Ciebie i znajomych, bez włączonego komputera.
 

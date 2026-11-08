@@ -399,7 +399,9 @@ function filterZoneCards(
       if (card.meta.revealed) return toCardView(card, state, viewerId);
       // cyberpunk-tcg-ai local patch: CR 5.7.4.1 — face-down Legends are hidden from their owner
       // too (only an effect that lets you look sets `revealed`). Upstream showed them to the owner.
-      if (zone === "legendArea" && card.meta.faceDown) {
+      // Also during setup: Legends are placed face-down in a random order (CR 4.3 / 7.7), so their
+      // order must not be visible before they are flipped down.
+      if (zone === "legendArea" && (card.meta.faceDown || state.G.gamePhase === "setup")) {
         return toFaceDownCardView(card, state);
       }
       if (zone === "eddieArea" && card.meta.faceDown) {

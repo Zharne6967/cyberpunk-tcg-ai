@@ -18,7 +18,7 @@ services:
       - key: HOST
         value: 0.0.0.0
       - key: BOT_THREADS
-        value: "1"
+        value: "0"
       - key: PUBLIC_LANDING_HOST
         fromService:
           type: web
