@@ -328,3 +328,7 @@ export {
 } from "./automation/index.ts";
 
 export { COMBAT_STATE_VERSION, restoreCombatState } from "./state/combat-state-version.ts";
+
+// cyberpunk-tcg-ai local patch: expose the bots' legal-action enumeration so the game UI can
+// offer every legal action generically (see vendor/UPSTREAM.md).
+export { enumerateCandidateActions, enumerateChoiceActions } from "./automation/search/shared.ts";

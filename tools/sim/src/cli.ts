@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { checkDeckLegality, type Deck } from "@cpai/core";
 import type { MatchOutcome, MatchSpec } from "./match.ts";
-import { STRATEGIES } from "./strategies.ts";
+import { STRATEGIES } from "@cpai/ai";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const decksDir = join(root, "data/decks");

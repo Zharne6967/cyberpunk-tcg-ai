@@ -9,6 +9,7 @@
     "@tcg/cyberpunk-types": "workspace:*",
     "@tcg/cyberpunk-utils": "workspace:*",
     "@tcg/cyberpunk-ai-runner": "workspace:*",
-    "@cpai/core": "workspace:*"
+    "@cpai/core": "workspace:*",
+    "@cpai/ai": "workspace:*"
   }
 }

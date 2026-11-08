@@ -1,6 +1,6 @@
 import { createPlayerId, runAutoMatch, type AutoMatchResult } from "@tcg/cyberpunk-engine";
 import { getCatalog, toEngineDeckList, type Deck } from "@cpai/core";
-import { getStrategy } from "./strategies.ts";
+import { getStrategy } from "@cpai/ai";
 
 export interface MatchSpec {
   deckA: Deck;

@@ -1,6 +1,6 @@
 {
   "schema": "cpai.cards.v1",
-  "generatedAt": "2026-11-08T12:20:00.867Z",
+  "generatedAt": "2026-11-08T13:23:47.329Z",
   "source": {
     "engine": "thecardgoat/tcg-engines (MIT)",
     "commit": "6de59de1c203827edc1bc6faa1bc6184cd126a5f",
@@ -9,6 +9,7 @@
   "count": 152,
   "cards": [
     {
+      "id": "6a5a1e34-fdd3-42de-b6bd-4b2553d6df39",
       "slug": "adrenaline-converter",
       "name": "Adrenaline Converter",
       "subtitle": null,
@@ -59,6 +60,7 @@
       ]
     },
     {
+      "id": "5233bacc-f39f-4383-8e25-57ef634735ca",
       "slug": "arasaka-emergency-radioport",
       "name": "Arasaka Emergency Radioport",
       "subtitle": null,
@@ -121,6 +123,7 @@
       ]
     },
     {
+      "id": "1d8f611c-dd08-48d1-82eb-451d56dcf651",
       "slug": "deadman-transmitter",
       "name": "Deadman Transmitter",
       "subtitle": null,
@@ -173,6 +176,7 @@
       ]
     },
     {
+      "id": "df06b6e2-1675-48a3-bfe2-d0bc4c5f35eb",
       "slug": "dying-night-v-s-pistol",
       "name": "Dying Night",
       "subtitle": "V's Pistol",
@@ -257,6 +261,7 @@
       ]
     },
     {
+      "id": "500ae9b9-0afa-4b82-87ed-61c72583139c",
       "slug": "gorilla-arms",
       "name": "Gorilla Arms",
       "subtitle": null,
@@ -304,6 +309,7 @@
       ]
     },
     {
+      "id": "654f2289-5d75-4f8b-bd35-702031fbb214",
       "slug": "kiroshi-optics",
       "name": "Kiroshi Optics",
       "subtitle": null,
@@ -371,6 +377,7 @@
       ]
     },
     {
+      "id": "6720e7fd-d1e8-4c8a-9ff2-f51f62241902",
       "slug": "mandibular-upgrade",
       "name": "Mandibular Upgrade",
       "subtitle": null,
@@ -445,6 +452,7 @@
       "rulings": []
     },
     {
+      "id": "28198e04-60e2-4f81-9786-903a9a947d7a",
       "slug": "mantis-blades",
       "name": "Mantis Blades",
       "subtitle": null,
@@ -511,6 +519,7 @@
       "rulings": []
     },
     {
+      "id": "40c98fdc-45d0-458d-be2c-2697dc337ca5",
       "slug": "netwatch-netdriver",
       "name": "NetWatch Netdriver",
       "subtitle": null,
@@ -584,6 +593,7 @@
       ]
     },
     {
+      "id": "78ea68b3-1260-416b-9f88-d6be4586232b",
       "slug": "overwatch-panam-s-gift",
       "name": "Overwatch",
       "subtitle": "Panam's Gift",
@@ -639,6 +649,7 @@
       ]
     },
     {
+      "id": "7da95cf0-f749-439f-b40a-9d3057d2c995",
       "slug": "riot-shield",
       "name": "Riot Shield",
       "subtitle": null,
@@ -688,6 +699,7 @@
       ]
     },
     {
+      "id": "55153b49-c3a7-4208-a47b-0a91fa7e3b5c",
       "slug": "sandevistan",
       "name": "Sandevistan",
       "subtitle": null,
@@ -765,6 +777,7 @@
       ]
     },
     {
+      "id": "4670d02b-b97a-4771-bb7e-65bdc012530e",
       "slug": "satori-sword-of-saburo",
       "name": "Satori",
       "subtitle": "Sword of Saburo",
@@ -847,6 +860,7 @@
       ]
     },
     {
+      "id": "39665784-d2f1-43e8-a958-894bac716d71",
       "slug": "tetratronic-rippler",
       "name": "Tetratronic Rippler",
       "subtitle": null,
@@ -908,6 +922,7 @@
       ]
     },
     {
+      "id": "1263e2bf-bc15-4550-ad07-b028602d1354",
       "slug": "the-relic-experimental-biochip",
       "name": "The Relic",
       "subtitle": "Experimental Biochip",
@@ -964,6 +979,7 @@
       ]
     },
     {
+      "id": "1d7f3d02-27b5-4ab8-af99-f8f2e0fd62cf",
       "slug": "zetatech-berserk",
       "name": "Zetatech Berserk",
       "subtitle": null,
@@ -1012,6 +1028,7 @@
       ]
     },
     {
+      "id": "eead1bba-f247-423e-a4f5-b330945887b0",
       "slug": "zetatech-faceplate",
       "name": "Zetatech Faceplate",
       "subtitle": null,
@@ -1084,6 +1101,7 @@
       ]
     },
     {
+      "id": "eff41c12-b872-4101-9779-00e691532893",
       "slug": "adam-smasher-ender-of-legends",
       "name": "Adam Smasher",
       "subtitle": "Ender of Legends",
@@ -1166,6 +1184,7 @@
       ]
     },
     {
+      "id": "12475e77-0e16-420e-a935-65eb74290de8",
       "slug": "alt-cunningham-soulkiller-architect",
       "name": "Alt Cunningham",
       "subtitle": "Soulkiller Architect",
@@ -1246,6 +1265,7 @@
       ]
     },
     {
+      "id": "91df478a-91d5-4d42-a624-4c20ec61121c",
       "slug": "dexter-deshawn-off-the-grid",
       "name": "Dexter DeShawn",
       "subtitle": "Off the Grid",
@@ -1333,6 +1353,7 @@
       ]
     },
     {
+      "id": "3b3f941d-aa58-4337-99dc-4af3fd3ccd47",
       "slug": "dum-dum-maelstrom-triggerman",
       "name": "Dum Dum",
       "subtitle": "Maelstrom Triggerman",
@@ -1401,6 +1422,7 @@
       ]
     },
     {
+      "id": "55807eb7-8a8e-44a9-97a2-c8ac993e7b43",
       "slug": "evelyn-parker-beautiful-enigma",
       "name": "Evelyn Parker",
       "subtitle": "Beautiful Enigma",
@@ -1470,6 +1492,7 @@
       ]
     },
     {
+      "id": "72358c7d-9f29-4ef6-a682-f5bfc72c7714",
       "slug": "goro-takemura-hands-unclean",
       "name": "Goro Takemura",
       "subtitle": "Hands Unclean",
@@ -1545,6 +1568,7 @@
       ]
     },
     {
+      "id": "424c9c0f-cc01-40ec-8404-75957985c7f8",
       "slug": "goro-takemura-vengeful-bodyguard",
       "name": "Goro Takemura",
       "subtitle": "Vengeful Bodyguard",
@@ -1619,6 +1643,7 @@
       ]
     },
     {
+      "id": "380b5e52-2651-4cde-8222-1db2ae6469e2",
       "slug": "hanako-arasaka-daughter-of-the-emperor",
       "name": "Hanako Arasaka",
       "subtitle": "Daughter of the Emperor",
@@ -1682,6 +1707,7 @@
       ]
     },
     {
+      "id": "04a82ebf-eba1-4888-a95d-f01b9bbd0167",
       "slug": "jackie-welles-mama-s-favorite",
       "name": "Jackie Welles",
       "subtitle": "Mama's Favorite",
@@ -1767,6 +1793,7 @@
       ]
     },
     {
+      "id": "40502c1f-78a2-426a-a706-c60ebd4b31e3",
       "slug": "jackie-welles-pour-one-out-for-me",
       "name": "Jackie Welles",
       "subtitle": "Pour One Out For Me",
@@ -1846,6 +1873,7 @@
       ]
     },
     {
+      "id": "56947a14-0b1e-4c3d-89e0-17839bcf4280",
       "slug": "johnny-silverhand-rocking-renegade",
       "name": "Johnny Silverhand",
       "subtitle": "Rocking Renegade",
@@ -1909,6 +1937,7 @@
       ]
     },
     {
+      "id": "4560f3d0-5f63-466b-93b7-fc9d822a556e",
       "slug": "judy-alvarez-braindance-maestro",
       "name": "Judy Álvarez",
       "subtitle": "Braindance Maestro",
@@ -2006,6 +2035,7 @@
       ]
     },
     {
+      "id": "5a441989-2997-40a2-a72e-08ca1442a7f3",
       "slug": "kerry-eurodyne-axe-attitude-audience",
       "name": "Kerry Eurodyne",
       "subtitle": "Axe, Attitude, Audience",
@@ -2060,6 +2090,7 @@
       ]
     },
     {
+      "id": "3f2e5d58-dea3-4090-8fe7-0f5f4af2d333",
       "slug": "lucyna-kushinada",
       "name": "Lucyna Kushinada",
       "subtitle": null,
@@ -2096,6 +2127,7 @@
       "rulings": []
     },
     {
+      "id": "fc516d53-5fd8-43dd-8349-9e60f0606efa",
       "slug": "muamar-reyes-el-capitan",
       "name": "Muamar Reyes",
       "subtitle": "El Capitán",
@@ -2183,6 +2215,7 @@
       ]
     },
     {
+      "id": "501a3796-9983-400f-86e4-97ffac5d5451",
       "slug": "padre-man-of-the-cross",
       "name": "Padre",
       "subtitle": "Man of the Cross",
@@ -2244,6 +2277,7 @@
       ]
     },
     {
+      "id": "950f045c-f5a4-4318-9907-b630d64de754",
       "slug": "panam-palmer-nomad-cavalry",
       "name": "Panam Palmer",
       "subtitle": "Nomad Cavalry",
@@ -2309,6 +2343,7 @@
       ]
     },
     {
+      "id": "4acee220-f0ae-4bdc-85c9-f8e70ba99673",
       "slug": "rebecca-having-a-moment",
       "name": "Rebecca",
       "subtitle": "Having a Moment",
@@ -2349,6 +2384,7 @@
       "rulings": []
     },
     {
+      "id": "e64e2978-695b-4fc5-b17b-62c710a11c47",
       "slug": "river-ward-detective-on-the-hunt",
       "name": "River Ward",
       "subtitle": "Detective on the Hunt",
@@ -2434,6 +2470,7 @@
       ]
     },
     {
+      "id": "012b0300-6af1-417e-86a2-dc208a60ac15",
       "slug": "rogue-amendiares-preem-solo",
       "name": "Rogue Amendiares",
       "subtitle": "Preem Solo",
@@ -2499,6 +2536,7 @@
       ]
     },
     {
+      "id": "9e681d3e-cbfd-4c7b-a69a-72a83dc8b847",
       "slug": "royce-psycho-on-the-edge",
       "name": "Royce",
       "subtitle": "Psycho on the Edge",
@@ -2581,6 +2619,7 @@
       ]
     },
     {
+      "id": "cf50fa24-bf94-4c35-bcc1-c6d56a6f68d8",
       "slug": "saburo-arasaka-stubborn-patriarch",
       "name": "Saburo Arasaka",
       "subtitle": "Stubborn Patriarch",
@@ -2655,6 +2694,7 @@
       ]
     },
     {
+      "id": "e2dc863c-5bc9-4ad7-9138-2d5b966ed901",
       "slug": "sasha-yakovleva-won-t-let-you-down",
       "name": "Sasha Yakovleva",
       "subtitle": "Won't Let You Down",
@@ -2719,6 +2759,7 @@
       ]
     },
     {
+      "id": "627186b3-cffb-4228-aed4-b3ee35235fb6",
       "slug": "v-corporate-exile",
       "name": "V",
       "subtitle": "Corporate Exile",
@@ -2793,6 +2834,7 @@
       ]
     },
     {
+      "id": "81a8dec7-9541-4020-93e1-7d798a57dcbc",
       "slug": "v-streetkid",
       "name": "V",
       "subtitle": "Streetkid",
@@ -2894,6 +2936,7 @@
       ]
     },
     {
+      "id": "f090dc44-d7f0-4aec-a19e-9213155a6611",
       "slug": "viktor-vektor-sit-down-and-relax",
       "name": "Viktor Vektor",
       "subtitle": "Sit Down and Relax",
@@ -2967,6 +3010,7 @@
       ]
     },
     {
+      "id": "99f5e311-8dfd-42a9-abd0-2e50ac68679e",
       "slug": "wakako-okada-peace-and-harmony",
       "name": "Wakako Okada",
       "subtitle": "Peace and Harmony",
@@ -3027,6 +3071,7 @@
       ]
     },
     {
+      "id": "31fa5825-946a-4ca2-afa8-8f07b9898d6a",
       "slug": "yorinobu-arasaka-embracing-destruction",
       "name": "Yorinobu Arasaka",
       "subtitle": "Embracing Destruction",
@@ -3099,6 +3144,7 @@
       ]
     },
     {
+      "id": "17a80b46-c583-4867-97ac-7855494363a9",
       "slug": "don-t-fear-the-reaper",
       "name": "(Don't Fear) The Reaper",
       "subtitle": null,
@@ -3166,6 +3212,7 @@
       ]
     },
     {
+      "id": "d039e4b3-9b83-40da-8d8f-b1dfb1f172f1",
       "slug": "afterparty-at-lizzie-s",
       "name": "Afterparty at Lizzie's",
       "subtitle": null,
@@ -3248,6 +3295,7 @@
       ]
     },
     {
+      "id": "1f969c27-dddb-4971-9ab5-bd728c3e3e52",
       "slug": "all-is-lost",
       "name": "All is Lost",
       "subtitle": null,
@@ -3307,6 +3355,7 @@
       ]
     },
     {
+      "id": "59ddecca-1501-492a-b8b1-d4b38d4486c9",
       "slug": "appetite-for-destruction",
       "name": "Appetite for Destruction",
       "subtitle": null,
@@ -3366,6 +3415,7 @@
       ]
     },
     {
+      "id": "3eb0f8bf-afb9-42a7-a4fa-710e2eb5c89c",
       "slug": "bonnie-and-clyde",
       "name": "Bonnie and Clyde",
       "subtitle": null,
@@ -3417,6 +3467,7 @@
       ]
     },
     {
+      "id": "84561b4c-67f0-4b2e-80ac-6b9c0a2396e3",
       "slug": "bootleg-black-sapphire-show",
       "name": "Bootleg Black Sapphire Show",
       "subtitle": null,
@@ -3488,6 +3539,7 @@
       ]
     },
     {
+      "id": "81fb66ee-b054-4f78-b0c9-7d2c9ff53435",
       "slug": "carnage-at-the-colosseum",
       "name": "Carnage at the Colosseum",
       "subtitle": null,
@@ -3540,6 +3592,7 @@
       ]
     },
     {
+      "id": "a5e0cd15-861f-46ac-b6e9-db5e30acfc82",
       "slug": "chrome-reverie",
       "name": "Chrome Reverie",
       "subtitle": null,
@@ -3600,6 +3653,7 @@
       ]
     },
     {
+      "id": "71fb410b-b56e-42b2-a793-4c49e935b9f1",
       "slug": "corporate-surveillance",
       "name": "Corporate Surveillance",
       "subtitle": null,
@@ -3673,6 +3727,7 @@
       ]
     },
     {
+      "id": "d0991502-57e5-42e2-b37b-64b425f4f1b5",
       "slug": "cyberpsychosis",
       "name": "Cyberpsychosis",
       "subtitle": null,
@@ -3746,6 +3801,7 @@
       ]
     },
     {
+      "id": "2697ed9d-72fc-4658-9c94-977668911a67",
       "slug": "detonate",
       "name": "Detonate",
       "subtitle": null,
@@ -3803,6 +3859,7 @@
       ]
     },
     {
+      "id": "0cd37c43-e722-48eb-91ef-4c1bd1645215",
       "slug": "floor-it",
       "name": "Floor It",
       "subtitle": null,
@@ -3887,6 +3944,7 @@
       ]
     },
     {
+      "id": "c5d2fed1-1470-4ac5-9f84-bf66705901ce",
       "slug": "fool-on-the-hill",
       "name": "Fool on the Hill",
       "subtitle": null,
@@ -3938,6 +3996,7 @@
       ]
     },
     {
+      "id": "27c01b18-2a9c-4d66-ad21-b75869fba666",
       "slug": "gunpoint-diplomacy",
       "name": "Gunpoint Diplomacy",
       "subtitle": null,
@@ -3994,6 +4053,7 @@
       ]
     },
     {
+      "id": "a708461f-1f91-4789-bb0d-96e3de5fcf44",
       "slug": "industrial-assembly",
       "name": "Industrial Assembly",
       "subtitle": null,
@@ -4080,6 +4140,7 @@
       ]
     },
     {
+      "id": "c29aefc5-c8dd-4188-95d9-e46c5ee289eb",
       "slug": "les-elemens",
       "name": "Les Élémens",
       "subtitle": null,
@@ -4135,6 +4196,7 @@
       ]
     },
     {
+      "id": "793d9650-0a59-4c89-9d85-05a9d6873d2e",
       "slug": "live-with-the-aftermath",
       "name": "Live with the Aftermath",
       "subtitle": null,
@@ -4194,6 +4256,7 @@
       ]
     },
     {
+      "id": "0f7c1c54-0e2e-44a5-ac7f-5263fbab21d3",
       "slug": "memory-relapse",
       "name": "Memory Relapse",
       "subtitle": null,
@@ -4245,6 +4308,7 @@
       ]
     },
     {
+      "id": "e4af26f0-e25d-4e30-8bac-6701f54f3e97",
       "slug": "nocturne-op55-n1",
       "name": "Nocturne OP55 N1",
       "subtitle": null,
@@ -4305,6 +4369,7 @@
       ]
     },
     {
+      "id": "144c3559-3518-4c01-b9e6-af42b7166661",
       "slug": "over-the-edge",
       "name": "Over the Edge",
       "subtitle": null,
@@ -4382,6 +4447,7 @@
       ]
     },
     {
+      "id": "3b30f02d-84dd-402c-ab4b-87a2ec3badce",
       "slug": "peace-offering",
       "name": "Peace Offering",
       "subtitle": null,
@@ -4445,6 +4511,7 @@
       ]
     },
     {
+      "id": "7977a175-0516-478e-b166-3edb035849a4",
       "slug": "pyramid-song",
       "name": "Pyramid Song",
       "subtitle": null,
@@ -4496,6 +4563,7 @@
       ]
     },
     {
+      "id": "ad13a7bc-c49d-4166-8a9c-965e7bfa9b8f",
       "slug": "reboot-optics",
       "name": "Reboot Optics",
       "subtitle": null,
@@ -4567,6 +4635,7 @@
       ]
     },
     {
+      "id": "b4cba235-816d-4888-a308-1c397b9288e7",
       "slug": "safety-override",
       "name": "Safety Override",
       "subtitle": null,
@@ -4620,6 +4689,7 @@
       ]
     },
     {
+      "id": "050d0502-94b0-4bee-a7e6-a9b00f31b4ae",
       "slug": "shattered-memories",
       "name": "Shattered Memories",
       "subtitle": null,
@@ -4683,6 +4753,7 @@
       ]
     },
     {
+      "id": "f3ba5ef7-5e91-4956-a887-b88a4b854867",
       "slug": "synapse-burnout",
       "name": "Synapse Burnout",
       "subtitle": null,
@@ -4740,6 +4811,7 @@
       ]
     },
     {
+      "id": "1535c19d-54e5-4289-9cb7-15ab429c0092",
       "slug": "take-control",
       "name": "Take Control",
       "subtitle": null,
@@ -4797,6 +4869,7 @@
       ]
     },
     {
+      "id": "5ea00b3a-7e85-4c7d-91ad-90e0cf370c27",
       "slug": "the-heist",
       "name": "The Heist",
       "subtitle": null,
@@ -4852,6 +4925,7 @@
       ]
     },
     {
+      "id": "2993d637-d44d-4add-8473-26d67c0d1bc0",
       "slug": "three-mouths-one-desire",
       "name": "Three Mouths, One Desire",
       "subtitle": null,
@@ -4904,6 +4978,7 @@
       ]
     },
     {
+      "id": "9a0fd5a3-a00b-425c-a251-755eeab12bfe",
       "slug": "towerfall",
       "name": "Towerfall",
       "subtitle": null,
@@ -4965,6 +5040,7 @@
       ]
     },
     {
+      "id": "ec857ab0-995e-4c32-84b6-7ba57b2f6137",
       "slug": "trust-no-one",
       "name": "Trust No One",
       "subtitle": null,
@@ -5028,6 +5104,7 @@
       ]
     },
     {
+      "id": "5b8f8d4f-c62e-4bde-a086-2ce15bd9449d",
       "slug": "unlikely-bond",
       "name": "Unlikely Bond",
       "subtitle": null,
@@ -5080,6 +5157,7 @@
       ]
     },
     {
+      "id": "404748b4-f30e-4bf1-8991-5ad449da755a",
       "slug": "we-gotta-live-together",
       "name": "We Gotta Live Together",
       "subtitle": null,
@@ -5148,6 +5226,7 @@
       ]
     },
     {
+      "id": "3126fa21-ea19-4096-8233-d63797bb9fe4",
       "slug": "wild-in-the-streets",
       "name": "Wild in the Streets",
       "subtitle": null,
@@ -5207,6 +5286,7 @@
       ]
     },
     {
+      "id": "e48c9d39-ef27-4b8f-8690-d75c3a4807b0",
       "slug": "6th-street-recruits",
       "name": "6th Street Recruits",
       "subtitle": null,
@@ -5255,6 +5335,7 @@
       ]
     },
     {
+      "id": "a2ad9c2f-bfb7-473b-9408-91af142d269d",
       "slug": "adam-smasher-metal-over-meat",
       "name": "Adam Smasher",
       "subtitle": "Metal Over Meat",
@@ -5329,6 +5410,7 @@
       ]
     },
     {
+      "id": "858e95f5-2efb-460e-b890-e8a5140e11c9",
       "slug": "alt-cunningham-mother-of-daemons",
       "name": "Alt Cunningham",
       "subtitle": "Mother of Daemons",
@@ -5383,6 +5465,7 @@
       ]
     },
     {
+      "id": "e8aa7757-e5e3-4137-8970-4fa546b9bed9",
       "slug": "animals-wrecker",
       "name": "Animals Wrecker",
       "subtitle": null,
@@ -5426,6 +5509,7 @@
       "rulings": []
     },
     {
+      "id": "ce45cb9d-430a-4ccf-bb4b-acf0b76120e0",
       "slug": "augmented-negotiators",
       "name": "Augmented Negotiators",
       "subtitle": null,
@@ -5476,6 +5560,7 @@
       ]
     },
     {
+      "id": "0273f402-94fb-4b59-90ec-a1057c2d1284",
       "slug": "caliber-totentanz-s-top-dog",
       "name": "Caliber",
       "subtitle": "Totentanz's Top Dog",
@@ -5531,6 +5616,7 @@
       ]
     },
     {
+      "id": "3c4cf61f-c469-4ad6-a209-67e715f9d45b",
       "slug": "chrome-fang",
       "name": "Chrome Fang",
       "subtitle": null,
@@ -5610,6 +5696,7 @@
       ]
     },
     {
+      "id": "71652e73-984a-4630-be47-af947f87d5c1",
       "slug": "corpo-security",
       "name": "Corpo Security",
       "subtitle": null,
@@ -5689,6 +5776,7 @@
       ]
     },
     {
+      "id": "a1e60653-5e28-49ee-9798-d16520b553c3",
       "slug": "delamain-cab",
       "name": "Delamain Cab",
       "subtitle": null,
@@ -5766,6 +5854,7 @@
       ]
     },
     {
+      "id": "3bb1f191-927e-45b3-86ca-cb30baabfe0d",
       "slug": "delamain-rideshare-ai",
       "name": "Delamain",
       "subtitle": "Rideshare AI",
@@ -5817,6 +5906,7 @@
       ]
     },
     {
+      "id": "f61b944a-32e3-4085-894b-7bd498325156",
       "slug": "dexter-deshawn-one-last-chance",
       "name": "Dexter DeShawn",
       "subtitle": "One Last Chance",
@@ -5874,6 +5964,7 @@
       ]
     },
     {
+      "id": "c688ca08-b3b7-441d-b161-78b9a63a8a9e",
       "slug": "el-sombreron-la-venganza-lenta",
       "name": "El Sombrerón",
       "subtitle": "La Venganza Lenta",
@@ -5932,6 +6023,7 @@
       ]
     },
     {
+      "id": "917e6515-ed23-4a1d-baaa-474d879bdabc",
       "slug": "emergency-atlus",
       "name": "Emergency Atlus",
       "subtitle": null,
@@ -5994,6 +6086,7 @@
       "rulings": []
     },
     {
+      "id": "a3cc3d15-8e6a-4684-b2ca-c843b4a854e2",
       "slug": "evelyn-parker-scheming-siren",
       "name": "Evelyn Parker",
       "subtitle": "Scheming Siren",
@@ -6063,6 +6156,7 @@
       ]
     },
     {
+      "id": "4a8dfe3f-980d-4370-ac10-6bd989042cdf",
       "slug": "field-operator",
       "name": "Field Operator",
       "subtitle": null,
@@ -6138,6 +6232,7 @@
       ]
     },
     {
+      "id": "0901652d-99c9-46c7-9821-ca3e8208fb4d",
       "slug": "gilded-maton",
       "name": "Gilded Matón",
       "subtitle": null,
@@ -6188,6 +6283,7 @@
       ]
     },
     {
+      "id": "08e6a687-56b7-4ac1-982f-8a8d6d0c0bc5",
       "slug": "goro-takemura-losing-his-way",
       "name": "Goro Takemura",
       "subtitle": "Losing His Way",
@@ -6244,6 +6340,7 @@
       ]
     },
     {
+      "id": "d2a9bcb0-a5e1-4413-8140-8b808258a753",
       "slug": "hacked-corpo",
       "name": "Hacked Corpo",
       "subtitle": null,
@@ -6294,6 +6391,7 @@
       ]
     },
     {
+      "id": "2902da45-ec28-4971-a731-ea1eda4c6ba1",
       "slug": "hanako-arasaka-in-a-gilded-cage",
       "name": "Hanako Arasaka",
       "subtitle": "In a Gilded Cage",
@@ -6346,6 +6444,7 @@
       "rulings": []
     },
     {
+      "id": "2a9deb43-bf9a-41db-9a05-bb0d357bb08e",
       "slug": "heywood-ripperdoc",
       "name": "Heywood Ripperdoc",
       "subtitle": null,
@@ -6407,6 +6506,7 @@
       ]
     },
     {
+      "id": "b0453570-7ed8-4031-9562-cb73d7a979e5",
       "slug": "jacked-in-voodoo-boy",
       "name": "Jacked-In Voodoo Boy",
       "subtitle": null,
@@ -6455,6 +6555,7 @@
       ]
     },
     {
+      "id": "b665e103-456b-4c51-9551-95b0bc87212a",
       "slug": "jackie-welles-ride-or-die-choom",
       "name": "Jackie Welles",
       "subtitle": "Ride or Die Choom",
@@ -6522,6 +6623,7 @@
       ]
     },
     {
+      "id": "e8b0432c-4d2d-4464-9a00-f3626917a7f0",
       "slug": "japantown-jonin",
       "name": "Japantown Jonin",
       "subtitle": null,
@@ -6573,6 +6675,7 @@
       ]
     },
     {
+      "id": "9a4002b0-0f0b-4c9a-a198-691d058b6dcc",
       "slug": "johnny-silverhand-never-stop-fighting",
       "name": "Johnny Silverhand",
       "subtitle": "Never Stop Fighting",
@@ -6640,6 +6743,7 @@
       ]
     },
     {
+      "id": "cb7f8d05-87cc-4606-ad71-a9283f2f4b20",
       "slug": "judy-alvarez-nothing-to-doubt",
       "name": "Judy Álvarez",
       "subtitle": "Nothing to Doubt",
@@ -6695,6 +6799,7 @@
       ]
     },
     {
+      "id": "5c4d4058-9185-4305-9e8f-7eca41cf6674",
       "slug": "kerry-eurodyne-the-last-rockerboy",
       "name": "Kerry Eurodyne",
       "subtitle": "The Last Rockerboy",
@@ -6763,6 +6868,7 @@
       ]
     },
     {
+      "id": "1b516742-cdf3-4597-8ba1-be787240ab3b",
       "slug": "la-llorona-ghost-of-the-past",
       "name": "La Llorona",
       "subtitle": "Ghost of the Past",
@@ -6821,6 +6927,7 @@
       ]
     },
     {
+      "id": "6b078eff-4cef-4beb-a299-ed388a72ce45",
       "slug": "lizzy-wizzy-delicate-weapon",
       "name": "Lizzy Wizzy",
       "subtitle": "Delicate Weapon",
@@ -6867,6 +6974,7 @@
       "rulings": []
     },
     {
+      "id": "f57094f7-0720-4ba5-9a71-aafbc714d65a",
       "slug": "maelstrom-goons",
       "name": "Maelstrom Goons",
       "subtitle": null,
@@ -6915,6 +7023,7 @@
       ]
     },
     {
+      "id": "35c1fda3-60f9-4779-b690-30b283d52297",
       "slug": "maelstrom-zealots",
       "name": "Maelstrom Zealots",
       "subtitle": null,
@@ -6969,6 +7078,7 @@
       ]
     },
     {
+      "id": "5380dea3-4d21-445b-af02-487b45d40395",
       "slug": "maman-brigitte-spirit-of-death",
       "name": "Maman Brigitte",
       "subtitle": "Spirit of Death",
@@ -7038,6 +7148,7 @@
       ]
     },
     {
+      "id": "d6f16c44-6d56-48ff-8130-154eea5540ca",
       "slug": "maxtac-av",
       "name": "MaxTac AV",
       "subtitle": null,
@@ -7100,6 +7211,7 @@
       ]
     },
     {
+      "id": "78fee308-5d4e-491c-9596-423dc20da5e3",
       "slug": "maxtac-heavy",
       "name": "MaxTac Heavy",
       "subtitle": null,
@@ -7147,6 +7259,7 @@
       ]
     },
     {
+      "id": "2a8802d3-598c-4ce3-9051-59ecf965ffbf",
       "slug": "maxtac-squadron",
       "name": "MaxTac Squadron",
       "subtitle": null,
@@ -7206,6 +7319,7 @@
       ]
     },
     {
+      "id": "95840ebd-d00a-49ff-b4e5-e2064cfc13a9",
       "slug": "maxtac-suppression-team",
       "name": "MaxTac Suppression Team",
       "subtitle": null,
@@ -7253,6 +7367,7 @@
       ]
     },
     {
+      "id": "21f68be2-c664-4ae0-a7ef-965a3a5a14c8",
       "slug": "meredith-stout-stone-cold-corpo",
       "name": "Meredith Stout",
       "subtitle": "Stone Cold Corpo",
@@ -7303,6 +7418,7 @@
       ]
     },
     {
+      "id": "066641c5-acc2-45f4-ba67-16a8d20cce73",
       "slug": "minotaur",
       "name": "Minotaur",
       "subtitle": null,
@@ -7376,6 +7492,7 @@
       ]
     },
     {
+      "id": "383abfb4-eedb-47c1-87f0-3ae4973c3619",
       "slug": "misty-olszewski-mender-of-broken-spirits",
       "name": "Misty Olszewski",
       "subtitle": "Mender of Broken Spirits",
@@ -7433,6 +7550,7 @@
       ]
     },
     {
+      "id": "920cabc9-f350-4f61-96c6-69e649271456",
       "slug": "modded-kusanagi",
       "name": "Modded Kusanagi",
       "subtitle": null,
@@ -7483,6 +7601,7 @@
       ]
     },
     {
+      "id": "08b52bdb-be1e-4931-90c4-4354eea5b145",
       "slug": "modded-muramasa",
       "name": "Modded Muramasa",
       "subtitle": null,
@@ -7530,6 +7649,7 @@
       ]
     },
     {
+      "id": "ef77dd1f-3abd-4ce2-becc-97dd768a5022",
       "slug": "mox-inciters",
       "name": "Mox Inciters",
       "subtitle": null,
@@ -7582,6 +7702,7 @@
       ]
     },
     {
+      "id": "619429c9-132f-496e-8aa0-414e850c87ec",
       "slug": "mt0d12-flathead",
       "name": "MT0D12 Flathead",
       "subtitle": null,
@@ -7640,6 +7761,7 @@
       ]
     },
     {
+      "id": "3c144d6a-0c1a-43e9-bd35-85d6fc46adef",
       "slug": "nadia-fighting-through-grief",
       "name": "Nadia",
       "subtitle": "Fighting Through Grief",
@@ -7688,6 +7810,7 @@
       ]
     },
     {
+      "id": "4c098450-e3ae-47e5-98d4-d51a2ab132ce",
       "slug": "octant",
       "name": "Octant",
       "subtitle": null,
@@ -7737,6 +7860,7 @@
       ]
     },
     {
+      "id": "3ce6b982-7bba-46f1-8832-8867ec3588d4",
       "slug": "offduty-malfini",
       "name": "Offduty Malfini",
       "subtitle": null,
@@ -7799,6 +7923,7 @@
       ]
     },
     {
+      "id": "c4ef7be4-4817-4fae-9016-582e999d4996",
       "slug": "pacifica-netrunner",
       "name": "Pacifica Netrunner",
       "subtitle": null,
@@ -7848,6 +7973,7 @@
       ]
     },
     {
+      "id": "34774f04-4f16-40eb-8ee4-999144e572ab",
       "slug": "panam-palmer-strength-through-family",
       "name": "Panam Palmer",
       "subtitle": "Strength Through Family",
@@ -7905,6 +8031,7 @@
       ]
     },
     {
+      "id": "0974a7af-dcd7-44d9-b57a-b6a4719afcd6",
       "slug": "pepe-najarro-working-doubles",
       "name": "Pepe Najarro",
       "subtitle": "Working Doubles",
@@ -7954,6 +8081,7 @@
       ]
     },
     {
+      "id": "783a9082-b79c-4b45-bf66-48728ff9b92d",
       "slug": "placide-voodoo-sentinel",
       "name": "Placide",
       "subtitle": "Voodoo Sentinel",
@@ -8006,6 +8134,7 @@
       ]
     },
     {
+      "id": "14d87f2a-8bd7-424f-b65b-3659156cef81",
       "slug": "psycho-squad",
       "name": "Psycho Squad",
       "subtitle": null,
@@ -8066,6 +8195,7 @@
       "rulings": []
     },
     {
+      "id": "20bcc767-29f0-4aa0-b842-4d4e546ed36e",
       "slug": "riding-nomad",
       "name": "Riding Nomad",
       "subtitle": null,
@@ -8116,6 +8246,7 @@
       "rulings": []
     },
     {
+      "id": "65a14367-da52-4578-8162-3c4bac11007d",
       "slug": "rita-wheeler-no-stupid-questions",
       "name": "Rita Wheeler",
       "subtitle": "No Stupid Questions",
@@ -8166,6 +8297,7 @@
       ]
     },
     {
+      "id": "7ea6eecc-e55e-4634-93eb-b2b46e79635d",
       "slug": "rockn-rockerboy",
       "name": "Rockn' Rockerboy",
       "subtitle": null,
@@ -8208,6 +8340,7 @@
       "rulings": []
     },
     {
+      "id": "9d994a42-4a63-44ad-ad7a-edead6af06a2",
       "slug": "rogue-amendiares-queen-of-the-afterlife",
       "name": "Rogue Amendiares",
       "subtitle": "Queen of the Afterlife",
@@ -8264,6 +8397,7 @@
       ]
     },
     {
+      "id": "9e465b11-9743-4275-a71d-d701b059eef0",
       "slug": "royce-don-t-call-me-simon",
       "name": "Royce",
       "subtitle": "Don't Call Me Simon",
@@ -8324,6 +8458,7 @@
       ]
     },
     {
+      "id": "fee335a7-2546-48a5-9bb8-b0886014ce66",
       "slug": "ruthless-lowlife",
       "name": "Ruthless Lowlife",
       "subtitle": null,
@@ -8384,6 +8519,7 @@
       ]
     },
     {
+      "id": "9611a3ba-d365-453f-89ed-c986a1948edc",
       "slug": "sandayu-oda-hanako-s-guardian",
       "name": "Sandayu Oda",
       "subtitle": "Hanako's Guardian",
@@ -8440,6 +8576,7 @@
       ]
     },
     {
+      "id": "a29490bb-2836-48b6-a4f9-a44b25c8bfa2",
       "slug": "saul-bright-stormrider",
       "name": "Saul Bright",
       "subtitle": "Stormrider",
@@ -8488,6 +8625,7 @@
       ]
     },
     {
+      "id": "7a62beca-ac54-4c0d-847d-ed85838c5093",
       "slug": "screw-lovelorn-fool",
       "name": "Screw",
       "subtitle": "Lovelorn Fool",
@@ -8542,6 +8680,7 @@
       ]
     },
     {
+      "id": "b05cb065-309e-45a3-bbe0-20f4b6ea71aa",
       "slug": "secondhand-bombus",
       "name": "Secondhand Bombus",
       "subtitle": null,
@@ -8619,6 +8758,7 @@
       "rulings": []
     },
     {
+      "id": "b3b40c68-705b-41ff-ae10-4132497c4a39",
       "slug": "sketchy-ripper",
       "name": "Sketchy Ripper",
       "subtitle": null,
@@ -8672,6 +8812,7 @@
       ]
     },
     {
+      "id": "3c4e7fcb-933d-4712-9ce7-6052a14f8e94",
       "slug": "swordwise-huscle",
       "name": "Swordwise Huscle",
       "subtitle": null,
@@ -8739,6 +8880,7 @@
       ]
     },
     {
+      "id": "5a5a177c-6ed8-4bd9-8b11-13c2b64414e2",
       "slug": "t-bug-amateur-philosopher",
       "name": "T-Bug",
       "subtitle": "Amateur Philosopher",
@@ -8807,6 +8949,7 @@
       ]
     },
     {
+      "id": "2a4a1f1a-9888-403e-90a9-4021c3f52674",
       "slug": "trauma-team-operatives",
       "name": "Trauma Team Operatives",
       "subtitle": null,
@@ -8855,6 +8998,7 @@
       ]
     },
     {
+      "id": "31e5b986-1e67-439c-81fc-49f8938bd002",
       "slug": "tyger-s-whisper",
       "name": "Tyger's Whisper",
       "subtitle": null,
@@ -8916,6 +9060,7 @@
       ]
     },
     {
+      "id": "9ed58d18-df78-4689-b28f-77260243c522",
       "slug": "v-roamer-of-the-badlands",
       "name": "V",
       "subtitle": "Roamer of the Badlands",
@@ -8964,6 +9109,7 @@
       ]
     },
     {
+      "id": "5cf0c12a-814e-4801-8171-7fe8c09fad21",
       "slug": "valentino-guerrera",
       "name": "Valentino Guerrera",
       "subtitle": null,
@@ -9012,6 +9158,7 @@
       ]
     },
     {
+      "id": "5d6afeed-1532-4a01-bb40-a011030a7785",
       "slug": "valentino-street-racer",
       "name": "Valentino Street Racer",
       "subtitle": null,
@@ -9062,6 +9209,7 @@
       ]
     },
     {
+      "id": "92d23553-8b0d-49cd-8cbe-6f00b3377298",
       "slug": "viktor-vektor-drop-your-illusions",
       "name": "Viktor Vektor",
       "subtitle": "Drop Your Illusions",
@@ -9113,6 +9261,7 @@
       ]
     },
     {
+      "id": "647bb074-197f-4059-bac5-251b47c98287",
       "slug": "viktor-vektor-you-might-feel-a-little-pinch",
       "name": "Viktor Vektor",
       "subtitle": "You Might Feel a Little Pinch",
@@ -9162,6 +9311,7 @@
       ]
     },
     {
+      "id": "b7a94000-c026-433e-82fa-901bf22db54e",
       "slug": "westbrook-netrunner",
       "name": "Westbrook Netrunner",
       "subtitle": null,
@@ -9215,6 +9365,7 @@
       ]
     },
     {
+      "id": "67b47cff-2237-4765-86fb-9b2b3abecbb1",
       "slug": "wraith-marauders",
       "name": "Wraith Marauders",
       "subtitle": null,
@@ -9276,6 +9427,7 @@
       ]
     },
     {
+      "id": "6cf6456d-d020-4c6c-9041-66d503a01a0a",
       "slug": "yorinobu-arasaka-steel-dragon",
       "name": "Yorinobu Arasaka",
       "subtitle": "Steel Dragon",

@@ -42,8 +42,13 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+echo Buduje interfejs...
+call pnpm build
+echo.
+echo Pobieram obrazki kart (mozna przerwac Ctrl+C - dociagna sie w trakcie gry)...
+call pnpm images
 echo.
 echo === Gotowe! ===
-echo Sprawdz symulator:  pnpm sim --list
+echo Uruchom gre:  start.bat  (dwuklik)
 echo.
 pause

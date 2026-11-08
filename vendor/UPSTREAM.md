@@ -35,3 +35,5 @@ commit: `6de59de1c203827edc1bc6faa1bc6184cd126a5f`
   official API (verified 2026-11-08 via api.netdeck.gg). Excluded.
 - `cyberpunk-engine/src/cards/programs/shattered-memories.test.ts` — one assertion about an
   animation "emphasis" step (presentation only, game state is correct). Left visible.
+6. `cyberpunk-engine/src/index.ts`: re-export `enumerateCandidateActions` / `enumerateChoiceActions`
+   (used by the game server to list legal actions for the human player).

@@ -9,9 +9,14 @@
     "node": ">=22.18"
   },
   "scripts": {
+    "start": "tsx apps/server/src/main.ts",
+    "build": "pnpm --filter @cpai/web build",
+    "dev": "pnpm --filter @cpai/web dev",
+    "images": "tsx apps/server/src/prefetch-images.ts",
+    "selftest": "tsx apps/server/src/selftest.ts",
     "test": "vitest run",
     "test:engine": "vitest run vendor/cyberpunk-engine",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "export-data": "tsx tools/export-data/src/index.ts",
     "sim": "tsx tools/sim/src/cli.ts"
   },

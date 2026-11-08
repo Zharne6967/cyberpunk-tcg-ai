@@ -27,6 +27,7 @@ const cards = catalog.cards
     const card = c as typeof c & { rulesText?: string; reminderText?: string; printings?: { setCode: string; collectorNumber: string; rarity: string; imageUrl: string }[] };
     const [, subtitle] = card.displayName.includes(":") ? card.displayName.split(/:\s*/, 2) : [card.displayName, null];
     return {
+      id: card.id,
       slug: card.slug,
       name: card.name,
       subtitle: subtitle ?? null,
