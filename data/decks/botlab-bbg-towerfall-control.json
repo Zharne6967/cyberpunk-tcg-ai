@@ -1,0 +1,30 @@
+{
+  "id": "botlab-bbg-towerfall-control",
+  "name": "BBG — Towerfall control",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "alt-cunningham-soulkiller-architect",
+    "hanako-arasaka-daughter-of-the-emperor",
+    "jackie-welles-pour-one-out-for-me"
+  ],
+  "main": {
+    "jacked-in-voodoo-boy": 3,
+    "pepe-najarro-working-doubles": 3,
+    "psycho-squad": 1,
+    "lizzy-wizzy-delicate-weapon": 3,
+    "maman-brigitte-spirit-of-death": 2,
+    "placide-voodoo-sentinel": 2,
+    "floor-it": 2,
+    "peace-offering": 3,
+    "trust-no-one": 3,
+    "three-mouths-one-desire": 3,
+    "chrome-reverie": 3,
+    "nocturne-op55-n1": 3,
+    "pyramid-song": 3,
+    "les-elemens": 3,
+    "towerfall": 3
+  }
+}

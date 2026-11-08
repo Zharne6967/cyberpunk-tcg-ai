@@ -1,0 +1,25 @@
+{
+  "name": "cyberpunk-tcg-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lokalny AI-rywal, trener i deck builder do Cyberpunk TCG (fan-made, nieoficjalny).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:engine": "vitest run vendor/cyberpunk-engine",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "export-data": "tsx tools/export-data/src/index.ts",
+    "sim": "tsx tools/sim/src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.4"
+  },
+  "packageManager": "pnpm@10.28.0"
+}

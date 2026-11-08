@@ -1,0 +1,347 @@
+import type { Effect } from "@tcg/cyberpunk-types";
+import type { MoveDefinition, MoveInput } from "../types/commands.ts";
+import { executeAbilityEffects, processEventTriggers } from "../ability-executor.ts";
+import { resolveTarget, type ResolutionContext } from "../effects/target-resolver.ts";
+import type { CardInstanceId, PlayerId as PlayerIdType } from "../types/branded.ts";
+import type { MatchState } from "../types/match-state.ts";
+import type { Operations } from "../operations/index.ts";
+import { enterStartPhase } from "./keep-hand.ts";
+import { beginGainGigStep, readySpentCards } from "./gain-gig.ts";
+import { defOf } from "../state/lookups.ts";
+import { getCardsMarkedForEndTurnDefeat } from "../active-effects/index.ts";
+import { getMustAttackCardIds } from "./attack-requirements.ts";
+import { resolveEndOfTurnDefeats } from "./resolve-attack.ts";
+import { bothFixerAreasEmpty } from "./overtime.ts";
+
+export interface PassPhaseInput extends MoveInput {
+  args: Record<string, never>;
+}
+
+export const passPhaseMove: MoveDefinition<PassPhaseInput> = {
+  available({ state, playerId }) {
+    if (state.G.gamePhase === "setup") return false;
+    if (state.G.turnMetadata.activePlayerId !== playerId) return false;
+    if (state.G.gamePhase === "main" && !state.G.attackState) {
+      return getMustAttackCardIds(state as MatchState, playerId).length === 0;
+    }
+    return false;
+  },
+
+  validate({ state, playerId }) {
+    if (state.G.gamePhase === "end") {
+      return { valid: false, error: "Game has ended", errorCode: "GAME_ENDED" };
+    }
+    if (state.G.gamePhase !== "setup" && state.G.turnMetadata.activePlayerId !== playerId) {
+      return { valid: false, error: "Not your turn", errorCode: "NOT_YOUR_TURN" };
+    }
+    if (state.G.gamePhase === "main" && state.G.attackState) {
+      return { valid: false, error: "Attack in progress", errorCode: "ATTACK_IN_PROGRESS" };
+    }
+    if (
+      state.G.gamePhase === "main" &&
+      getMustAttackCardIds(state as MatchState, playerId).length > 0
+    ) {
+      return {
+        valid: false,
+        error: "A unit must attack if it can",
+        errorCode: "MUST_ATTACK",
+      };
+    }
+    return { valid: true };
+  },
+
+  execute({ state, playerId, operations }) {
+    if (state.G.gamePhase === "setup") {
+      // Legacy fallback: callers that haven't migrated to mulligan/keepHand
+      // can still force-start the game with passPhase. Runs the same start
+      // phase as the auto-advance path so behavior is consistent.
+      enterStartPhase(state, operations);
+      operations.log.emit({
+        type: "passPhase",
+        playerId,
+        timestamp: Date.now(),
+        turnNumber: state.G.turnMetadata.turnNumber,
+        fromPhase: "setup",
+        toPhase: state.G.gamePhase,
+      });
+      return;
+    }
+
+    if (state.G.gamePhase === "main") {
+      endTurn(state, playerId, operations);
+      operations.log.emit({
+        type: "passPhase",
+        playerId,
+        timestamp: Date.now(),
+        turnNumber: state.G.turnMetadata.turnNumber,
+        fromPhase: "main",
+        toPhase: state.G.gamePhase,
+      });
+    }
+  },
+};
+
+/** End the active player's turn: end-of-turn triggers, cleanup, next turn. */
+export function endTurn(state: MatchState, playerId: PlayerIdType, operations: Operations) {
+  const currentTurn = state.G.turnMetadata.turnNumber;
+  operations.event.emit({
+    type: "actionLog",
+    messageKey: "move.turnEnded",
+    params: { turnNumber: currentTurn },
+    playerId,
+  });
+  const turnEndedEvent = {
+    type: "turnEnded" as const,
+    playerId,
+    turnNumber: currentTurn,
+  };
+  operations.event.emit(turnEndedEvent);
+  // Fire any end-of-turn triggers keyed on the `turnEnded` event (e.g.
+  // modded-kusanagi's return-to-hand, panam-palmer's mass-ready) BEFORE
+  // delayed-effects-bag cleanup so immediate end-of-turn triggers resolve
+  // first. Every emitted event must have its triggers processed.
+  processEventTriggers(turnEndedEvent, state, operations);
+  if (pendingResolutionBlocksEndTurn(state)) {
+    state.G.turnMetadata.suspendedEndTurn = { playerId, turnNumber: currentTurn };
+    return;
+  }
+
+  finishEndTurn(state, playerId, operations, currentTurn);
+}
+
+/** True while a trigger prompt, in-progress trigger, or queued trigger is open. */
+function pendingResolutionBlocksEndTurn(state: MatchState): boolean {
+  return (
+    state.G.turnMetadata.pendingChoice !== undefined ||
+    state.G.turnMetadata.currentTrigger !== undefined ||
+    state.G.turnMetadata.triggerQueue.length > 0
+  );
+}
+
+export function resumeSuspendedEndTurn(state: MatchState, operations: Operations): void {
+  const suspended = state.G.turnMetadata.suspendedEndTurn;
+  if (!suspended) return;
+  if (pendingResolutionBlocksEndTurn(state)) return;
+
+  state.G.turnMetadata.suspendedEndTurn = undefined;
+  finishEndTurn(state, suspended.playerId, operations, suspended.turnNumber);
+}
+
+function finishEndTurn(
+  state: MatchState,
+  playerId: PlayerIdType,
+  operations: Operations,
+  currentTurn: number,
+): void {
+  // Process delayed effects from the effectBag before cleanup
+  const bagEntries = [...state.G.effectBag];
+  for (const entry of bagEntries) {
+    if (entry.delayedTiming !== "endOfTurn") continue;
+    if (entry.delayedEffects) {
+      const ctx: ResolutionContext = {
+        state,
+        sourceCardId: entry.sourceCardId as CardInstanceId,
+        sourcePlayerId: entry.sourcePlayerId as PlayerIdType,
+        abilityIndex: -1,
+        contextTargets: {},
+        boundTargets: (entry.resolvedBindings ?? {}) as Record<string, string[]>,
+      };
+      emitDelayedDefeatLog(
+        entry.sourceCardId as CardInstanceId,
+        entry.delayedEffects,
+        ctx,
+        operations,
+      );
+      executeAbilityEffects(entry.delayedEffects, ctx, operations);
+    }
+    operations.game.removeBagEntry(entry.id);
+  }
+
+  defeatCardsMarkedForEndTurn(state, operations);
+
+  // Defeated-card triggers ({Defeated} abilities, defeat-observing Legends)
+  // queue a prompt that must resolve BEFORE the turn flips — resetTurnFlags
+  // wipes triggerQueue/currentTrigger, and a prompt left pointing at an
+  // emptied queue can never be satisfied (stuck chooseTrigger loop).
+  if (pendingResolutionBlocksEndTurn(state)) {
+    state.G.turnMetadata.suspendedEndTurn = { playerId, turnNumber: currentTurn };
+    return;
+  }
+
+  const opponentId = state.ctx.playerIds.find((id) => id !== playerId)!;
+  operations.game.cleanupTurnEffects();
+  operations.game.resetTurnFlags(playerId);
+  operations.game.resetTurnFlags(opponentId);
+  state.G.turnMetadata.suspendedEndTurn = undefined;
+
+  // CR 1.11.1: overtime begins after two consecutive turns where both
+  // players' Fixer areas were empty at the start of each turn.
+  // Persist the actual start-of-turn condition. Do not infer this from a fixed
+  // turn number or whether a Gig was taken later in the turn: judge corrections
+  // can change either without changing how the turn began.
+  const nextTurnNumber = currentTurn + 1;
+  const overtimeTriggered =
+    state.G.turnMetadata.previousTurnBeganWithEmptyFixer &&
+    state.G.turnMetadata.turnBeganWithEmptyFixer;
+  const nextTurnBeganWithEmptyFixer = bothFixerAreasEmpty(state);
+
+  if (overtimeTriggered && !state.G.overtime) {
+    state.G.overtime = true;
+    state.G.turnMetadata.overtimeActive = true;
+    operations.event.emit({
+      type: "actionLog",
+      messageKey: "game.overtimeStarted",
+      params: {},
+      playerId,
+      category: "system",
+    });
+  }
+
+  operations.game.setTurnMetadata({
+    activePlayerId: opponentId,
+    turnNumber: nextTurnNumber,
+    previousTurnBeganWithEmptyFixer: state.G.turnMetadata.turnBeganWithEmptyFixer,
+    turnBeganWithEmptyFixer: nextTurnBeganWithEmptyFixer,
+    gigTakenThisTurn: false,
+    overtimeActive: state.G.overtime,
+  });
+
+  operations.game.setPhase("start");
+
+  operations.game.cleanupEffectsExpiringAtTurnStart(opponentId);
+
+  // The 7+ Gig/deck-out check fires at the turn-start boundary before card
+  // triggers can draw or otherwise change the state used by the win check.
+  // During overtime, majority decides the game instead.
+  if (maybeEndForTurnStart(state, opponentId, playerId, operations, state.G.overtime)) {
+    return;
+  }
+
+  const turnStartedEvent = {
+    type: "turnStarted" as const,
+    playerId: opponentId,
+    turnNumber: currentTurn + 1,
+  };
+  operations.event.emit(turnStartedEvent);
+  if (nextTurnBeganWithEmptyFixer && !state.G.overtime) {
+    operations.event.emit({
+      type: "actionLog",
+      messageKey: state.G.turnMetadata.previousTurnBeganWithEmptyFixer
+        ? "game.overtimeFinalTurn"
+        : "game.overtimeFirstEmptyTurn",
+      params: {},
+      playerId: opponentId,
+      category: "system",
+    });
+  }
+  processEventTriggers(turnStartedEvent, state, operations);
+
+  // Start phase begins.
+  // Step 1: READY SPENT CARDS.
+  readySpentCards(state, operations, opponentId);
+
+  // Step 2: DRAW A CARD.
+  operations.zone.drawCards(opponentId, 1);
+  if (state.G.gameEnded) {
+    return;
+  }
+
+  // Step 3: GAIN A GIG. Auto-resolve a forced die or ask the active player.
+  beginGainGigStep(state, opponentId, operations);
+}
+
+function defeatCardsMarkedForEndTurn(state: MatchState, operations: Operations): void {
+  const marked = getCardsMarkedForEndTurnDefeat(state).filter((cardId) => {
+    const card = state.G.cardIndex[cardId as string];
+    return card?.zone === "field";
+  });
+  // Consume the delayed process before it can suspend for a replacement
+  // choice. Resuming the end turn re-enters finishEndTurn, and the same
+  // process must not apply twice (CR 10.29.1).
+  const markedIds = new Set(marked.map((cardId) => cardId as string));
+  for (const effect of state.G.activeEffects) {
+    if (
+      effect.kind === "defeatAtEndOfTurnIfAttacked" &&
+      effect.triggered &&
+      markedIds.has(effect.targetCardId as string)
+    ) {
+      operations.game.removeActiveEffect(effect.id);
+    }
+  }
+  resolveEndOfTurnDefeats(state, operations, marked);
+}
+
+function maybeEndForTurnStart(
+  state: MatchState,
+  playerId: PlayerIdType,
+  previousPlayerId: PlayerIdType,
+  operations: Operations,
+  overtimeActive: boolean,
+): boolean {
+  const player = state.G.players[playerId as string];
+  if (!player) return false;
+
+  if (overtimeActive) {
+    const totalDice = Object.keys(state.G.gigDice).length;
+    const majority = Math.floor(totalDice / 2) + 1;
+
+    for (const pid of state.ctx.playerIds) {
+      const p = state.G.players[pid as string];
+      if (p && p.gigArea.length >= majority) {
+        operations.game.endGame(pid, "overtime_majority");
+        return true;
+      }
+    }
+  } else {
+    if (player.gigArea.length >= 7) {
+      operations.game.endGame(playerId, "gig_victory");
+      return true;
+    }
+  }
+
+  if (player.zones.deck.length === 0) {
+    operations.game.endGame(previousPlayerId, "deck_out_victory");
+    return true;
+  }
+
+  return false;
+}
+
+function emitDelayedDefeatLog(
+  sourceCardId: CardInstanceId,
+  effects: Effect[],
+  ctx: ResolutionContext,
+  operations: Operations,
+): void {
+  const sourceCard = ctx.state.G.cardIndex[sourceCardId as string];
+  const sourceCardName = sourceCard ? defOf(sourceCard).displayName : "A delayed effect";
+  const targetIds = effects.flatMap((effect) => {
+    if (effect.effect !== "defeat") return [];
+    return resolveTarget(effect.target, ctx).filter((id) => ctx.state.G.cardIndex[id]);
+  });
+  if (targetIds.length === 0) return;
+
+  const targetNames = targetIds
+    .map((id) => {
+      const card = ctx.state.G.cardIndex[id]!;
+      return defOf(card).displayName;
+    })
+    .join(", ");
+
+  operations.event.emit({
+    type: "actionLog",
+    messageKey: "trigger.delayedDefeat",
+    params: { sourceCardName, targetNames },
+    playerId: ctx.sourcePlayerId,
+    category: "trigger",
+    cardIds: [sourceCardId as string, ...targetIds],
+  });
+  operations.log.emit({
+    type: "action",
+    messageKey: "trigger.delayedDefeat",
+    params: { sourceCardName, targetNames },
+    playerId: ctx.sourcePlayerId,
+    turnNumber: ctx.state.G.turnMetadata.turnNumber,
+    timestamp: Date.now(),
+  });
+}

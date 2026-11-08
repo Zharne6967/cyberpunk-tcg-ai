@@ -1,0 +1,30 @@
+{
+  "id": "botlab-hanako-netdriver-gigs-draw-engine",
+  "name": "Hanako + Netdriver — Gigs as Draw Engine",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "hanako-arasaka-daughter-of-the-emperor",
+    "goro-takemura-hands-unclean",
+    "alt-cunningham-soulkiller-architect"
+  ],
+  "main": {
+    "corpo-security": 3,
+    "maxtac-squadron": 3,
+    "goro-takemura-losing-his-way": 3,
+    "panam-palmer-strength-through-family": 3,
+    "sandayu-oda-hanako-s-guardian": 2,
+    "jacked-in-voodoo-boy": 2,
+    "netwatch-netdriver": 3,
+    "sandevistan": 3,
+    "overwatch-panam-s-gift": 2,
+    "riot-shield": 2,
+    "peace-offering": 3,
+    "trust-no-one": 3,
+    "chrome-reverie": 3,
+    "floor-it": 3,
+    "reboot-optics": 2
+  }
+}

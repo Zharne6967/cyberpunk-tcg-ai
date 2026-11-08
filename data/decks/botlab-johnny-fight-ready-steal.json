@@ -1,0 +1,30 @@
+{
+  "id": "botlab-johnny-fight-ready-steal",
+  "name": "Johnny — Fight, Ready and Steal",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "v-streetkid",
+    "saburo-arasaka-stubborn-patriarch",
+    "goro-takemura-hands-unclean"
+  ],
+  "main": {
+    "johnny-silverhand-never-stop-fighting": 3,
+    "swordwise-huscle": 3,
+    "goro-takemura-losing-his-way": 3,
+    "maxtac-squadron": 3,
+    "corpo-security": 3,
+    "minotaur": 2,
+    "sandayu-oda-hanako-s-guardian": 2,
+    "satori-sword-of-saburo": 3,
+    "mantis-blades": 3,
+    "sandevistan": 3,
+    "riot-shield": 2,
+    "corporate-surveillance": 3,
+    "industrial-assembly": 3,
+    "synapse-burnout": 2,
+    "peace-offering": 2
+  }
+}

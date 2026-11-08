@@ -1,0 +1,30 @@
+{
+  "id": "botlab-relic-placide-surgical-reanimation",
+  "name": "Relic + Placide — Surgical Reanimation",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "viktor-vektor-sit-down-and-relax",
+    "river-ward-detective-on-the-hunt",
+    "alt-cunningham-soulkiller-architect"
+  ],
+  "main": {
+    "secondhand-bombus": 3,
+    "viktor-vektor-you-might-feel-a-little-pinch": 3,
+    "hanako-arasaka-in-a-gilded-cage": 3,
+    "placide-voodoo-sentinel": 3,
+    "alt-cunningham-mother-of-daemons": 2,
+    "maxtac-suppression-team": 2,
+    "the-relic-experimental-biochip": 3,
+    "zetatech-faceplate": 3,
+    "kiroshi-optics": 3,
+    "netwatch-netdriver": 2,
+    "the-heist": 3,
+    "live-with-the-aftermath": 3,
+    "floor-it": 3,
+    "trust-no-one": 2,
+    "afterparty-at-lizzie-s": 2
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "id": "botlab-overwatch-recharge-control",
+  "name": "Overwatch — Recharge Control",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "hanako-arasaka-daughter-of-the-emperor",
+    "goro-takemura-hands-unclean",
+    "viktor-vektor-sit-down-and-relax"
+  ],
+  "main": {
+    "corpo-security": 3,
+    "maxtac-squadron": 3,
+    "goro-takemura-losing-his-way": 3,
+    "panam-palmer-strength-through-family": 3,
+    "sandayu-oda-hanako-s-guardian": 2,
+    "maxtac-suppression-team": 2,
+    "overwatch-panam-s-gift": 3,
+    "sandevistan": 3,
+    "zetatech-faceplate": 3,
+    "riot-shield": 2,
+    "peace-offering": 3,
+    "corporate-surveillance": 3,
+    "afterparty-at-lizzie-s": 3,
+    "synapse-burnout": 2,
+    "the-heist": 2
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@cpai/export-data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@tcg/cyberpunk-cards": "workspace:*",
+    "@tcg/cyberpunk-engine": "workspace:*",
+    "@tcg/cyberpunk-types": "workspace:*",
+    "@tcg/cyberpunk-utils": "workspace:*",
+    "@tcg/cyberpunk-ai-runner": "workspace:*",
+    "@cpai/core": "workspace:*"
+  }
+}

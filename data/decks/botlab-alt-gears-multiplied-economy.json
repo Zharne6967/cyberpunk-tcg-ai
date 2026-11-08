@@ -1,0 +1,30 @@
+{
+  "id": "botlab-alt-gears-multiplied-economy",
+  "name": "Alt + Gears — Multiplied Economy",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "viktor-vektor-sit-down-and-relax",
+    "river-ward-detective-on-the-hunt",
+    "jackie-welles-pour-one-out-for-me"
+  ],
+  "main": {
+    "secondhand-bombus": 3,
+    "viktor-vektor-you-might-feel-a-little-pinch": 3,
+    "hanako-arasaka-in-a-gilded-cage": 3,
+    "alt-cunningham-mother-of-daemons": 3,
+    "maxtac-suppression-team": 2,
+    "placide-voodoo-sentinel": 2,
+    "zetatech-faceplate": 3,
+    "netwatch-netdriver": 3,
+    "kiroshi-optics": 3,
+    "mandibular-upgrade": 2,
+    "the-heist": 3,
+    "afterparty-at-lizzie-s": 3,
+    "floor-it": 3,
+    "reboot-optics": 2,
+    "trust-no-one": 2
+  }
+}

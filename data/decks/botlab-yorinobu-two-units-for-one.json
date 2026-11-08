@@ -1,0 +1,29 @@
+{
+  "id": "botlab-yorinobu-two-units-for-one",
+  "name": "Yorinobu — Two Units for the Price of One",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "v-streetkid",
+    "yorinobu-arasaka-embracing-destruction",
+    "viktor-vektor-sit-down-and-relax"
+  ],
+  "main": {
+    "yorinobu-arasaka-steel-dragon": 3,
+    "kerry-eurodyne-the-last-rockerboy": 3,
+    "meredith-stout-stone-cold-corpo": 3,
+    "swordwise-huscle": 3,
+    "6th-street-recruits": 3,
+    "viktor-vektor-you-might-feel-a-little-pinch": 3,
+    "hanako-arasaka-in-a-gilded-cage": 2,
+    "johnny-silverhand-never-stop-fighting": 3,
+    "mantis-blades": 3,
+    "zetatech-faceplate": 3,
+    "satori-sword-of-saburo": 2,
+    "industrial-assembly": 3,
+    "the-heist": 3,
+    "afterparty-at-lizzie-s": 3
+  }
+}

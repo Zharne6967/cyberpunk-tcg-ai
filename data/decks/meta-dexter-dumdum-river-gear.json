@@ -1,0 +1,31 @@
+{
+  "id": "meta-dexter-dumdum-river-gear",
+  "name": "Dexter / Dum Dum / River — Gear Aggro (Top 16)",
+  "source": {
+    "kind": "tcgcontender",
+    "url": "https://tcgcontender.com/cyberpunk/decks",
+    "date": "2026-11-08",
+    "note": "Lista turniejowa, Standard"
+  },
+  "legends": [
+    "dexter-deshawn-off-the-grid",
+    "dum-dum-maelstrom-triggerman",
+    "river-ward-detective-on-the-hunt"
+  ],
+  "main": {
+    "6th-street-recruits": 3,
+    "adrenaline-converter": 3,
+    "gorilla-arms": 3,
+    "johnny-silverhand-never-stop-fighting": 3,
+    "kiroshi-optics": 3,
+    "mandibular-upgrade": 3,
+    "mantis-blades": 3,
+    "safety-override": 3,
+    "satori-sword-of-saburo": 3,
+    "secondhand-bombus": 3,
+    "sketchy-ripper": 3,
+    "viktor-vektor-you-might-feel-a-little-pinch": 3,
+    "zetatech-faceplate": 3,
+    "arasaka-emergency-radioport": 2
+  }
+}

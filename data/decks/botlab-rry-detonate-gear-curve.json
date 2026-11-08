@@ -1,0 +1,31 @@
+{
+  "id": "botlab-rry-detonate-gear-curve",
+  "name": "RRY — Detonate gear curve",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "v-streetkid",
+    "dexter-deshawn-off-the-grid",
+    "muamar-reyes-el-capitan"
+  ],
+  "main": {
+    "dexter-deshawn-one-last-chance": 2,
+    "la-llorona-ghost-of-the-past": 2,
+    "6th-street-recruits": 3,
+    "meredith-stout-stone-cold-corpo": 3,
+    "trauma-team-operatives": 3,
+    "yorinobu-arasaka-steel-dragon": 3,
+    "mantis-blades": 3,
+    "satori-sword-of-saburo": 2,
+    "zetatech-faceplate": 3,
+    "all-is-lost": 2,
+    "detonate": 2,
+    "industrial-assembly": 3,
+    "the-heist": 2,
+    "bonnie-and-clyde": 3,
+    "over-the-edge": 2,
+    "carnage-at-the-colosseum": 2
+  }
+}

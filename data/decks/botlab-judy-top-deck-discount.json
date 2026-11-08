@@ -1,0 +1,29 @@
+{
+  "id": "botlab-judy-top-deck-discount",
+  "name": "Judy — Top-of-Deck Discount, Not a Guaranteed Top",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "alt-cunningham-soulkiller-architect",
+    "jackie-welles-pour-one-out-for-me",
+    "judy-alvarez-braindance-maestro"
+  ],
+  "main": {
+    "evelyn-parker-scheming-siren": 3,
+    "jacked-in-voodoo-boy": 3,
+    "mt0d12-flathead": 3,
+    "judy-alvarez-nothing-to-doubt": 3,
+    "placide-voodoo-sentinel": 3,
+    "misty-olszewski-mender-of-broken-spirits": 2,
+    "netwatch-netdriver": 3,
+    "trust-no-one": 3,
+    "chrome-reverie": 3,
+    "pyramid-song": 3,
+    "towerfall": 3,
+    "floor-it": 3,
+    "les-elemens": 3,
+    "reboot-optics": 2
+  }
+}

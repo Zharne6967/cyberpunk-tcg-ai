@@ -1,0 +1,30 @@
+{
+  "id": "botlab-oda-industrial-assembly-pairs-plateaus",
+  "name": "Oda + Industrial Assembly — Pairs and Plateaus",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "hanako-arasaka-daughter-of-the-emperor",
+    "saburo-arasaka-stubborn-patriarch",
+    "yorinobu-arasaka-embracing-destruction"
+  ],
+  "main": {
+    "sandayu-oda-hanako-s-guardian": 3,
+    "goro-takemura-losing-his-way": 3,
+    "6th-street-recruits": 3,
+    "kerry-eurodyne-the-last-rockerboy": 3,
+    "maxtac-squadron": 3,
+    "minotaur": 2,
+    "corpo-security": 2,
+    "panam-palmer-strength-through-family": 2,
+    "mantis-blades": 3,
+    "satori-sword-of-saburo": 2,
+    "sandevistan": 2,
+    "industrial-assembly": 3,
+    "peace-offering": 3,
+    "corporate-surveillance": 3,
+    "synapse-burnout": 3
+  }
+}

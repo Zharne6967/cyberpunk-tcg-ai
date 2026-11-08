@@ -1,0 +1,29 @@
+{
+  "id": "botlab-ryb-low-cost-tempo",
+  "name": "Red/Yellow/Blue — Low-Cost Tempo",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "yorinobu-arasaka-embracing-destruction",
+    "viktor-vektor-sit-down-and-relax",
+    "alt-cunningham-soulkiller-architect"
+  ],
+  "main": {
+    "swordwise-huscle": 3,
+    "kerry-eurodyne-the-last-rockerboy": 3,
+    "viktor-vektor-you-might-feel-a-little-pinch": 3,
+    "gilded-maton": 3,
+    "psycho-squad": 3,
+    "delamain-cab": 3,
+    "mantis-blades": 3,
+    "zetatech-faceplate": 3,
+    "kiroshi-optics": 2,
+    "satori-sword-of-saburo": 2,
+    "industrial-assembly": 3,
+    "afterparty-at-lizzie-s": 3,
+    "floor-it": 3,
+    "trust-no-one": 3
+  }
+}

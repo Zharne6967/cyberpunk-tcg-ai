@@ -1,0 +1,40 @@
+{
+  "name": "@tcg/engine-core",
+  "version": "0.0.0",
+  "description": "Unified TCG engine core for Gundam, Cyberpunk, and One Piece.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./test-simulator": {
+      "types": "./src/test-simulator.ts",
+      "default": "./src/test-simulator.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "main": "./dist/index.mjs",
+    "types": "./dist/index.d.mts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "./test-simulator": {
+        "types": "./dist/test-simulator.d.mts",
+        "default": "./dist/test-simulator.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "dependencies": {
+    "@tcg/protocol": "workspace:*",
+    "mutative": "^1.3.0"
+  }
+}

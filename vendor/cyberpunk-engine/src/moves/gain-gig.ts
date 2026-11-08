@@ -1,0 +1,184 @@
+import type { MatchState } from "../types/match-state.ts";
+import type { GigDieId, PlayerId } from "../types/branded.ts";
+import type { MoveDefinition, MoveInput } from "../types/commands.ts";
+import type { Operations } from "../operations/index.ts";
+import { SeededRNG } from "../state/rng.ts";
+import { defOf } from "../state/lookups.ts";
+import { processEventTriggers } from "../ability-executor.ts";
+import { getEffectiveRules } from "../active-effects/index.ts";
+
+export interface GainGigInput extends MoveInput {
+  args: {
+    dieId: string;
+  };
+}
+
+/**
+ * Resolves the `gainGig` pending choice — step 3 of the ready phase: "Take a
+ * die from your fixer area, roll to set its value, then place it in your Gig
+ * area. You can choose any die except the d20, which must always be taken
+ * last." (cyberpunktcg.com/gameplay-guide)
+ */
+export const gainGigMove: MoveDefinition<GainGigInput> = {
+  handlesPendingChoice: true,
+
+  available({ state, playerId }) {
+    const choice = state.G.turnMetadata.pendingChoice;
+    if (!choice || choice.type !== "gainGig") return false;
+    return choice.chooserId === playerId;
+  },
+
+  validate({ state, playerId, input }) {
+    const choice = state.G.turnMetadata.pendingChoice;
+    if (!choice || choice.type !== "gainGig") {
+      return {
+        valid: false,
+        error: "No gain-gig choice is pending",
+        errorCode: "NO_PENDING_CHOICE",
+      };
+    }
+    if (choice.chooserId !== playerId) {
+      return { valid: false, error: "Not your gain-gig choice", errorCode: "WRONG_CHOOSER" };
+    }
+    const dieId = input.args.dieId as GigDieId;
+    if (!choice.payload.allowedDieIds.includes(dieId)) {
+      return { valid: false, error: "Die not allowed", errorCode: "DIE_NOT_ALLOWED" };
+    }
+    const die = state.G.gigDice[dieId as string];
+    if (!die) {
+      return { valid: false, error: "Die not found", errorCode: "DIE_NOT_FOUND" };
+    }
+    return { valid: true };
+  },
+
+  execute({ state, playerId, input, operations }) {
+    resolveGainGig(state, playerId, input.args.dieId as GigDieId, operations);
+  },
+};
+
+/**
+ * Begin Start Phase step 8.6.5. A single legal die is not a meaningful player
+ * decision, so roll it in immediately; otherwise expose the legal selection.
+ */
+export function beginGainGigStep(
+  state: MatchState,
+  playerId: PlayerId,
+  operations: Operations,
+): void {
+  const allowedDieIds = allowedGainGigDice(state, playerId as string);
+  const onlyLegalDie = allowedDieIds.length === 1 ? allowedDieIds[0] : undefined;
+
+  if (onlyLegalDie) {
+    resolveGainGig(state, playerId, onlyLegalDie, operations);
+    return;
+  }
+
+  if (allowedDieIds.length > 1) {
+    operations.game.setPendingChoice({
+      type: "gainGig",
+      chooserId: playerId,
+      effectId: "start-phase",
+      payload: { allowedDieIds },
+    });
+    return;
+  }
+
+  operations.game.setPhase("main");
+}
+
+function resolveGainGig(
+  state: MatchState,
+  playerId: PlayerId,
+  dieId: GigDieId,
+  operations: Operations,
+): void {
+  const rng = new SeededRNG(state.ctx.seed);
+  if (state.ctx.rngState) rng.setState(state.ctx.rngState);
+  const eventsBefore = operations.event.getEmittedEvents().length;
+  operations.gig.takeFromFixer(playerId, dieId, (dieType) => rng.rollDie(dieType));
+  state.ctx.rngState = rng.getState();
+  state.G.turnMetadata.gigTakenThisTurn = true;
+  operations.game.setPendingChoice(undefined);
+
+  for (const event of operations.event.getEmittedEvents().slice(eventsBefore)) {
+    if (event.type === "gigDieRolled") {
+      processEventTriggers(event, state, operations);
+    }
+  }
+
+  const die = state.G.gigDice[dieId as string];
+
+  operations.log.emit({
+    type: "gainGig",
+    playerId,
+    timestamp: Date.now(),
+    turnNumber: state.G.turnMetadata.turnNumber,
+    dieId,
+    dieType: die?.dieType ?? "unknown",
+    faceValue: die?.faceValue ?? 0,
+  });
+
+  operations.game.setPhase("main");
+}
+
+export function readySpentCards(
+  state: MatchState,
+  operations: Operations,
+  playerId: PlayerId,
+): number {
+  const player = state.G.players[playerId as string];
+  if (!player) return 0;
+  let readiedCount = 0;
+  const ids = [...player.zones.field, ...player.zones.legendArea, ...player.zones.eddieArea];
+  for (const cardId of ids) {
+    const card = state.G.cardIndex[cardId as string];
+    if (!card?.meta.spent) continue;
+    // cantReady rule locks a spent card through its ready step (e.g. Pacifica).
+    const rules = getEffectiveRules(state, cardId as string);
+    if (rules.includes("cantReady")) {
+      const sourceEffect = state.G.activeEffects.find(
+        (effect) =>
+          effect.kind === "grantRule" &&
+          effect.rule === "cantReady" &&
+          (effect.targetCardId as string) === (cardId as string),
+      );
+      const sourceCard = sourceEffect
+        ? state.G.cardIndex[sourceEffect.sourceCardId as string]
+        : undefined;
+      const sourceCardName = sourceCard ? defOf(sourceCard).displayName : undefined;
+      operations.event.emit({
+        type: "actionLog",
+        messageKey: "move.readyStep.cantReady",
+        params: {
+          cardName: defOf(card).displayName,
+          sourceDescription: sourceCardName ? `${sourceCardName}'s effect` : "an effect",
+        },
+        playerId,
+        category: "system",
+        cardIds: [cardId as string, ...(sourceEffect ? [sourceEffect.sourceCardId as string] : [])],
+      });
+      continue;
+    }
+    operations.card.ready(cardId);
+    readiedCount++;
+  }
+  if ((player.spentEddies ?? 0) > 0) {
+    operations.game.gainEddies(playerId, player.spentEddies);
+    player.spentEddies = 0;
+  }
+  return readiedCount;
+}
+
+/**
+ * Build the allowed-die-ids list per the d20-last rule: every non-d20 die in
+ * the fixer area, or the d20 if it's the only die left.
+ */
+export function allowedGainGigDice(state: MatchState, playerId: string): GigDieId[] {
+  const player = state.G.players[playerId];
+  if (!player) return [];
+  const fixer = player.fixerArea;
+  if (fixer.length === 0) return [];
+  const nonD20s = fixer.filter((id) => state.G.gigDice[id as string]?.dieType !== "d20");
+  if (nonD20s.length > 0) return nonD20s;
+  return fixer.filter((id) => state.G.gigDice[id as string]?.dieType === "d20");
+}

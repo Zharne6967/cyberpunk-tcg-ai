@@ -1,0 +1,422 @@
+import { z } from "zod";
+import { CHAT_PRESET_KEYS, MAX_CHAT_TEXT_LENGTH } from "./chat.js";
+import { InteractionSubmission } from "./interactions.js";
+import {
+  RequestPreparationSyncMessage,
+  ConfirmPreparationMessage,
+  ChoosePreparationFirstPlayerMessage,
+} from "./preparation.js";
+
+/**
+ * Client -> server Socket.IO gateway message schemas.
+ *
+ * Single source of truth for runtime validation at the trust boundary
+ * (client → ws-gateway middleware). Internal traffic (ws-gateway → inbox
+ * stream → game-server) trusts these types and skips revalidation.
+ *
+ * Each schema is paired with a `z.infer` type alias used by the typed
+ * `ClientToServerEvents` map in `./events.ts`.
+ *
+ * Public (unauthenticated) messages: `ping`.
+ * Authenticated messages require ticket / JWT / session.
+ */
+
+export const GatewayPingMessage = z.object({
+  type: z.literal("ping"),
+  /** Optional client timestamp for round-trip latency measurement. */
+  t: z.number().optional(),
+});
+
+export const JoinGameMessage = z.object({
+  type: z.literal("join_game"),
+  gameId: z.string().min(1),
+  /** HTTP bootstrap version; the server omits a duplicate snapshot when still current. */
+  stateVersion: z.number().int().min(0).optional(),
+  /** Legacy v1 hint. Protocol v2 derives role from the scoped credential. */
+  role: z.enum(["player", "spectator"]).optional(),
+  /** `game_profiles.game_profile_id` when known — correlation only; ticket/session is authoritative. */
+  gameProfileId: z.string().min(1).optional(),
+  /** Auth account id (`users.id`) when known — correlation only. */
+  userId: z.string().min(1).optional(),
+  correlationId: z.string().optional(),
+});
+
+export const ExecuteMoveMessage = z.object({
+  type: z.literal("execute_move"),
+  gameId: z.string().min(1),
+  /** Game roster seat id (`game_profiles.game_profile_id`); optional echo for logs. */
+  gameProfileId: z.string().min(1).optional(),
+  /** Auth account id (`users.id`) when known — correlation only. */
+  userId: z.string().min(1).optional(),
+  expectedVersion: z.number().int().min(0),
+  moveType: z.string().min(1),
+  payload: z.record(z.string(), z.unknown()),
+  correlationId: z.string().optional(),
+});
+
+export const SubmitInteractionMessage = z.object({
+  type: z.literal("submit_interaction"),
+  gameId: z.string().min(1),
+  /** Game roster seat id (`game_profiles.game_profile_id`); optional echo for logs. */
+  gameProfileId: z.string().min(1).optional(),
+  /** Auth account id (`users.id`) when known — correlation only. */
+  userId: z.string().min(1).optional(),
+  expectedVersion: z.number().int().min(0),
+  submission: InteractionSubmission,
+  correlationId: z.string().optional(),
+});
+
+export const ReconnectMessage = z.object({
+  type: z.literal("reconnect"),
+  gameId: z.string().min(1),
+  gameProfileId: z.string().min(1).optional(),
+  userId: z.string().min(1).optional(),
+  lastReceivedVersion: z.number().int().min(0),
+  correlationId: z.string().optional(),
+});
+
+export const LeaveGameMessage = z.object({
+  type: z.literal("leave_game"),
+  gameId: z.string().min(1),
+  gameProfileId: z.string().min(1).optional(),
+  userId: z.string().min(1).optional(),
+});
+
+export const SendChatMessage = z.object({
+  type: z.literal("send_chat_message"),
+  gameId: z.string().min(1),
+  presetKey: z.enum(CHAT_PRESET_KEYS),
+});
+
+export const SendFreeTextChatMessage = z.object({
+  type: z.literal("send_free_text_chat_message"),
+  gameId: z.string().min(1),
+  text: z
+    .string()
+    .trim()
+    .min(1)
+    .max(MAX_CHAT_TEXT_LENGTH)
+    .refine((value) => !/[\r\n]/.test(value), {
+      message: "Chat messages cannot contain newlines",
+    }),
+});
+
+export const MAX_HEARTBEAT_ROUND_TRIP_MS = 300_000;
+
+export const HeartbeatMessage = z
+  .object({
+    type: z.literal("heartbeat"),
+    /** Ephemeral probe id used to correlate one client-to-game-server round trip. */
+    correlationId: z.string().uuid().optional(),
+    /** Client wall-clock timestamp echoed by heartbeat_ack for same-clock RTT measurement. */
+    clientSentAt: z.number().int().nonnegative().optional(),
+    /** Previous full-path RTT, reported one heartbeat later for server-side observability. */
+    previousRoundTripMs: z
+      .number()
+      .nonnegative()
+      .finite()
+      .max(MAX_HEARTBEAT_ROUND_TRIP_MS)
+      .optional(),
+    /** Probe id associated with previousRoundTripMs. */
+    previousCorrelationId: z.string().uuid().optional(),
+    /** Optional echoes for correlation; connection/ticket is authoritative. */
+    gameProfileId: z.string().min(1).optional(),
+    userId: z.string().min(1).optional(),
+    /**
+     * Game the client is currently in. Server uses this to detect stale state
+     * (version mismatch) and match advancement (game ended).
+     */
+    game: z
+      .object({
+        gameId: z.string().min(1),
+        matchId: z.string().min(1),
+        stateVersion: z.number().int().min(0),
+      })
+      .optional(),
+    /**
+     * Client-side inactivity signals piggybacked on the heartbeat.
+     * Used to surface AFK status to the opponent.
+     */
+    activity: z
+      .object({
+        idle: z.boolean(),
+        tabVisible: z.boolean(),
+      })
+      .optional(),
+  })
+  .strict();
+
+/**
+ * Client pushes authoritative state for non-authoritative (client-authority) games.
+ * The server stores the state in Redis and broadcasts to spectators.
+ */
+export const PushStateMessage = z
+  .object({
+    type: z.literal("push_state"),
+    gameId: z.string().min(1),
+    /** Serialized engine state (the client is authoritative). */
+    state: z.unknown(),
+    /** Optional card-instance maps for engines that keep them outside state. */
+    cardsMaps: z.unknown().optional(),
+    /** Version this write was derived from; null creates the initial snapshot. */
+    expectedVersion: z.number().int().min(0).nullable(),
+    /** Monotonic version — client manages the version counter. */
+    version: z.number().int().min(0),
+    /** Move type that produced this state (for spectator display). */
+    moveType: z.string().min(1),
+    /** Actor who made the move. */
+    actorId: z.string().min(1),
+    /** Explicit terminal outcome for client-owned states without an engine-specific end marker. */
+    gameEnd: z
+      .object({
+        winnerId: z.string().min(1).optional(),
+        reason: z.string().min(1).max(200),
+      })
+      .strict()
+      .optional(),
+    /** Request id used when the client needs durable processing confirmation. */
+    correlationId: z.string().min(1).optional(),
+    /** Single accepted move delta for normal client-authority actions. */
+    acceptedMove: z
+      .object({
+        gameId: z.string(),
+        stateVersion: z.number().int().min(0),
+        turnNumber: z.number().int().min(0),
+        actorId: z.string(),
+        moveId: z.string(),
+        input: z.unknown().optional(),
+        processedCommand: z.unknown(),
+        timestamp: z.number().int().nonnegative(),
+        sourceAuthority: z.enum(["server", "client"]),
+        transitionType: z.enum(["move", "undo"]).optional(),
+        newStateID: z.number().int().min(0).optional(),
+        undoneStateID: z.number().int().min(0).optional(),
+        restoredCheckpointStateID: z.number().int().min(0).optional(),
+        undoneMoveId: z.string().optional(),
+      })
+      .optional(),
+    /** Batch accepted move delta used when backfilling initial client-side history. */
+    acceptedMoves: z
+      .array(
+        z.object({
+          gameId: z.string(),
+          stateVersion: z.number().int().min(0),
+          turnNumber: z.number().int().min(0),
+          actorId: z.string(),
+          moveId: z.string(),
+          input: z.unknown().optional(),
+          processedCommand: z.unknown(),
+          timestamp: z.number().int().nonnegative(),
+          sourceAuthority: z.enum(["server", "client"]),
+          transitionType: z.enum(["move", "undo"]).optional(),
+          newStateID: z.number().int().min(0).optional(),
+          undoneStateID: z.number().int().min(0).optional(),
+          restoredCheckpointStateID: z.number().int().min(0).optional(),
+          undoneMoveId: z.string().optional(),
+        }),
+      )
+      .optional(),
+    engineLogs: z
+      .array(
+        z.object({
+          gameId: z.string(),
+          stateVersion: z.number().int().min(0),
+          timestamp: z.number().int().nonnegative(),
+          sourceAuthority: z.enum(["server", "client"]),
+          log: z.unknown(),
+        }),
+      )
+      .optional(),
+  })
+  .strict();
+
+/** Client accepts a pending match found by the matchmaking worker. */
+export const MatchmakingAcceptMessage = z.object({
+  type: z.literal("matchmaking_accept"),
+  pendingMatchId: z.string().min(1),
+});
+
+/** Client declines a pending match found by the matchmaking worker. */
+export const MatchmakingDeclineMessage = z.object({
+  type: z.literal("matchmaking_decline"),
+  pendingMatchId: z.string().min(1),
+});
+
+/**
+ * Immediate inactivity signal sent when the client's idle/tab-visibility state changes.
+ * Sent in addition to the heartbeat piggyback so the server reacts within ~1 second.
+ */
+export const ActivityUpdateMessage = z.object({
+  type: z.literal("activity_update"),
+  gameId: z.string().min(1),
+  idle: z.boolean(),
+  tabVisible: z.boolean(),
+});
+
+/** Skip the opponent's turn when they are in negative time (first timeout). */
+export const SkipOpponentTurnMessage = z.object({
+  type: z.literal("skip_opponent_turn"),
+  gameId: z.string().min(1),
+});
+
+/** Drop the opponent when they have timed out twice (second timeout). */
+export const DropPlayerMessage = z.object({
+  type: z.literal("drop_player"),
+  gameId: z.string().min(1),
+});
+
+/** Concede the entire active match through the authoritative game engine. */
+export const ForfeitMatchMessage = z.object({
+  type: z.literal("forfeit_match"),
+  matchId: z.string().min(1),
+  gameId: z.string().min(1),
+  correlationId: z.string().min(1),
+});
+
+/**
+ * Client requests a lightweight state sync check after receiving a
+ * `game_already_completed` error.
+ */
+export const RequestGameStateSyncMessage = z.object({
+  type: z.literal("request_game_state_sync"),
+  gameId: z.string().min(1),
+  stateVersion: z.number().int().optional(),
+});
+
+// --- Proposal (bilateral consent) messages ---
+
+export const ProposalActionType = z.enum([
+  "cancel_match",
+  "undo",
+  "enable_free_text_chat",
+  "enable_manual_mode",
+  "disable_manual_mode",
+]);
+
+export const UndoScope = z.enum(["last_move", "turn_start"]);
+
+export const ProposalSendMessage = z
+  .object({
+    type: z.literal("proposal_send"),
+    gameId: z.string().min(1),
+    actionType: ProposalActionType,
+    /** Omitted legacy undo requests mean last_move. */
+    undoScope: UndoScope.optional(),
+  })
+  .superRefine((message, context) => {
+    if (message.actionType !== "undo" && message.undoScope !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["undoScope"],
+        message: "undoScope is only valid for undo proposals",
+      });
+    }
+  });
+
+export const ProposalAcceptMessage = z.object({
+  type: z.literal("proposal_accept"),
+  gameId: z.string().min(1),
+  actionType: ProposalActionType,
+});
+
+export const ProposalDeclineMessage = z.object({
+  type: z.literal("proposal_decline"),
+  gameId: z.string().min(1),
+  actionType: ProposalActionType,
+});
+
+/**
+ * Subscribe this socket to an event-scoped broadcast room
+ * (`event:{eventId}`). Used by participants on a live-event page so they
+ * receive real-time tournament progression (`tournament_update`) without
+ * polling. Subscription is authorized server-side by checking that the
+ * caller is a participant of the tournament (`tournament_participants`).
+ */
+export const SubscribeEventMessage = z.object({
+  type: z.literal("subscribe_event"),
+  eventId: z.string().min(1),
+  correlationId: z.string().optional(),
+});
+
+export const UnsubscribeEventMessage = z.object({
+  type: z.literal("unsubscribe_event"),
+  eventId: z.string().min(1),
+  correlationId: z.string().optional(),
+});
+
+/**
+ * Public matchmaking-dashboard room membership. This is intentionally a
+ * payload-free local gateway operation: anonymous visitors may observe public
+ * queue and match counts, but cannot select another game's room.
+ */
+export const SubscribeMatchmakingDashboardMessage = z
+  .object({
+    type: z.literal("subscribe_matchmaking_dashboard"),
+  })
+  .strict();
+
+export const UnsubscribeMatchmakingDashboardMessage = z
+  .object({
+    type: z.literal("unsubscribe_matchmaking_dashboard"),
+  })
+  .strict();
+
+export const GatewayClientMessage = z.union([
+  RequestPreparationSyncMessage,
+  ConfirmPreparationMessage,
+  ChoosePreparationFirstPlayerMessage,
+  GatewayPingMessage,
+  JoinGameMessage,
+  ExecuteMoveMessage,
+  SubmitInteractionMessage,
+  ReconnectMessage,
+  LeaveGameMessage,
+  SendChatMessage,
+  SendFreeTextChatMessage,
+  HeartbeatMessage,
+  ActivityUpdateMessage,
+  PushStateMessage,
+  MatchmakingAcceptMessage,
+  MatchmakingDeclineMessage,
+  SkipOpponentTurnMessage,
+  DropPlayerMessage,
+  ForfeitMatchMessage,
+  ProposalSendMessage,
+  ProposalAcceptMessage,
+  ProposalDeclineMessage,
+  RequestGameStateSyncMessage,
+  SubscribeEventMessage,
+  UnsubscribeEventMessage,
+  SubscribeMatchmakingDashboardMessage,
+  UnsubscribeMatchmakingDashboardMessage,
+]);
+
+export type GatewayPingMsg = z.infer<typeof GatewayPingMessage>;
+export type JoinGameMsg = z.infer<typeof JoinGameMessage>;
+export type ExecuteMoveMsg = z.infer<typeof ExecuteMoveMessage>;
+export type SubmitInteractionMsg = z.infer<typeof SubmitInteractionMessage>;
+export type ReconnectMsg = z.infer<typeof ReconnectMessage>;
+export type LeaveGameMsg = z.infer<typeof LeaveGameMessage>;
+export type SendChatMessageMsg = z.infer<typeof SendChatMessage>;
+export type SendFreeTextChatMessageMsg = z.infer<typeof SendFreeTextChatMessage>;
+export type HeartbeatMsg = z.infer<typeof HeartbeatMessage>;
+export type PushStateMsg = z.infer<typeof PushStateMessage>;
+export type MatchmakingAcceptMsg = z.infer<typeof MatchmakingAcceptMessage>;
+export type MatchmakingDeclineMsg = z.infer<typeof MatchmakingDeclineMessage>;
+export type SkipOpponentTurnMsg = z.infer<typeof SkipOpponentTurnMessage>;
+export type DropPlayerMsg = z.infer<typeof DropPlayerMessage>;
+export type ForfeitMatchMsg = z.infer<typeof ForfeitMatchMessage>;
+export type ProposalActionTypeValue = z.infer<typeof ProposalActionType>;
+export type UndoScopeValue = z.infer<typeof UndoScope>;
+export type ProposalSendMsg = z.infer<typeof ProposalSendMessage>;
+export type ProposalAcceptMsg = z.infer<typeof ProposalAcceptMessage>;
+export type ProposalDeclineMsg = z.infer<typeof ProposalDeclineMessage>;
+export type ActivityUpdateMsg = z.infer<typeof ActivityUpdateMessage>;
+export type RequestGameStateSyncMsg = z.infer<typeof RequestGameStateSyncMessage>;
+export type SubscribeEventMsg = z.infer<typeof SubscribeEventMessage>;
+export type UnsubscribeEventMsg = z.infer<typeof UnsubscribeEventMessage>;
+export type SubscribeMatchmakingDashboardMsg = z.infer<typeof SubscribeMatchmakingDashboardMessage>;
+export type UnsubscribeMatchmakingDashboardMsg = z.infer<
+  typeof UnsubscribeMatchmakingDashboardMessage
+>;
+export type GatewayClientMsg = z.infer<typeof GatewayClientMessage>;

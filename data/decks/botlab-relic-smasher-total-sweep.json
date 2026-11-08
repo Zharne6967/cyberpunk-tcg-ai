@@ -1,0 +1,30 @@
+{
+  "id": "botlab-relic-smasher-total-sweep",
+  "name": "Relic + Smasher — Total Sweep",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "viktor-vektor-sit-down-and-relax",
+    "river-ward-detective-on-the-hunt",
+    "dum-dum-maelstrom-triggerman"
+  ],
+  "main": {
+    "secondhand-bombus": 3,
+    "dexter-deshawn-one-last-chance": 3,
+    "viktor-vektor-you-might-feel-a-little-pinch": 3,
+    "hanako-arasaka-in-a-gilded-cage": 3,
+    "adam-smasher-metal-over-meat": 3,
+    "maxtac-suppression-team": 2,
+    "the-relic-experimental-biochip": 3,
+    "zetatech-faceplate": 3,
+    "kiroshi-optics": 3,
+    "mandibular-upgrade": 2,
+    "the-heist": 3,
+    "live-with-the-aftermath": 3,
+    "afterparty-at-lizzie-s": 3,
+    "safety-override": 2,
+    "cyberpsychosis": 1
+  }
+}

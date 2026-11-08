@@ -1,0 +1,29 @@
+{
+  "id": "botlab-ryg-low-cost-value",
+  "name": "Red/Yellow/Green — Low-Cost Value",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "yorinobu-arasaka-embracing-destruction",
+    "viktor-vektor-sit-down-and-relax",
+    "goro-takemura-hands-unclean"
+  ],
+  "main": {
+    "swordwise-huscle": 3,
+    "kerry-eurodyne-the-last-rockerboy": 3,
+    "6th-street-recruits": 3,
+    "viktor-vektor-you-might-feel-a-little-pinch": 3,
+    "gilded-maton": 3,
+    "field-operator": 3,
+    "mantis-blades": 3,
+    "zetatech-faceplate": 3,
+    "satori-sword-of-saburo": 2,
+    "arasaka-emergency-radioport": 2,
+    "industrial-assembly": 3,
+    "peace-offering": 3,
+    "corporate-surveillance": 3,
+    "afterparty-at-lizzie-s": 3
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "id": "botlab-cyberpsychosis-deadman-burst-insurance",
+  "name": "Cyberpsychosis + Deadman — Burst with Insurance",
+  "source": {
+    "kind": "authored-botlab",
+    "note": "Talia testowa z repozytorium silnika"
+  },
+  "legends": [
+    "v-streetkid",
+    "yorinobu-arasaka-embracing-destruction",
+    "dum-dum-maelstrom-triggerman"
+  ],
+  "main": {
+    "swordwise-huscle": 3,
+    "6th-street-recruits": 3,
+    "johnny-silverhand-never-stop-fighting": 3,
+    "viktor-vektor-you-might-feel-a-little-pinch": 3,
+    "yorinobu-arasaka-steel-dragon": 2,
+    "dexter-deshawn-one-last-chance": 2,
+    "mantis-blades": 3,
+    "kiroshi-optics": 3,
+    "zetatech-faceplate": 3,
+    "deadman-transmitter": 3,
+    "mandibular-upgrade": 2,
+    "satori-sword-of-saburo": 2,
+    "cyberpsychosis": 3,
+    "the-heist": 3,
+    "afterparty-at-lizzie-s": 2
+  }
+}
