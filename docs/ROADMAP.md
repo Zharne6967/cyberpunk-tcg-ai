@@ -59,8 +59,9 @@ Do zrobienia w etapie 4:
   symulacji, etap 8) i pisze przewodnik „jak na nią grać / jak ją kontrować” (łączy się z 5c).
 - **Wtyczka do przeglądarki (trener)**: czyta stan gry z symulatora online (np. choombattler.com /
   cyberpunk-tcg-sim.online) i pokazuje najlepsze zagranie + wyjaśnienie, liczone naszym uczciwym botem
-  (tylko informacje widoczne dla gracza). Ograniczenie: **tylko tryby treningowe / gry z botem** — podpowiadanie
-  w meczach z ludźmi (ranked, turnieje) to oszukiwanie i łamie regulaminy tych stron; wtyczka ma to blokować.
+  (tylko informacje widoczne dla gracza). Cel: nauka gry (gracz uczy kolegę, także w ich wspólnych partiach).
+  Decyzja gracza: prosty przełącznik **włącz/wyłącz**, bez blokad trybów; widoczny znaczek „Coach ON”, gdy działa.
+  Ten sam „trener” także w naszej aplikacji (podpowiedź najlepszego ruchu + wyjaśnienie, opcjonalnie w grze ze znajomym).
   Ryzyko techniczne: odczyt stanu z cudzej strony (DOM/WebSocket) bywa kruchy przy jej zmianach.
 
 ## Etap 5c — Analiza talii rywala i kontr-talia (prośba gracza, plan)
