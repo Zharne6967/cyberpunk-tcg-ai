@@ -436,7 +436,8 @@ export function Game({ gameId }: { gameId: string }) {
           />{" "}
           Win chance
         </label>
-        <label className="opt" hidden={state.mode !== "bot"}>
+        {state.mode === "bot" && (
+        <label className="opt">
           Bot speed{" "}
           <select
             value={speed}
@@ -457,6 +458,7 @@ export function Game({ gameId }: { gameId: string }) {
             ))}
           </select>
         </label>
+        )}
         {!state.result && (
           <button
             className="btn danger small"

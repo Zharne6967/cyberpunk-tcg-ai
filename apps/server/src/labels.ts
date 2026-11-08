@@ -3,8 +3,11 @@ import type { CardView, MatchView } from "@cpai/core/protocol";
 
 type MessageKey = keyof typeof enMessages;
 
-/** Game log: the engine's own English messages (official terminology). */
-export const LOG_MESSAGES = enMessages as Record<MessageKey, string>;
+/**
+ * Game log: the engine's own English messages (official terminology). Every line already shows who acted,
+ * so the internal seat id ("Player p1") is dropped from the concede line.
+ */
+export const LOG_MESSAGES = { ...enMessages, "move.concede": "Conceded the game." } as Record<MessageKey, string>;
 
 export interface NameIndex {
   card(id: string | undefined): CardView | undefined;

@@ -16,8 +16,8 @@ przeglądarka ──► cyberpunk-tcg-ai.onrender.com          (strona startowa,
                                                           budzi się w ~30–60 s)
 ```
 
-Wszystko opisuje plik [`render.yaml`](../render.yaml). Kod leży w **prywatnym** repozytorium GitHub,
-Render pobiera go stamtąd sam (nikt inny kodu nie widzi). Oba plany są darmowe.
+Wszystko opisuje plik [`render.yaml`](../render.yaml). Kod leży w publicznym repozytorium GitHub,
+Render pobiera go stamtąd sam. Oba plany są darmowe (bez karty płatniczej).
 
 ## Tryb online (`CPAI_CLOUD=1`)
 - Strona jest otwarta dla każdego; do wspólnej gry dołącza się **6-cyfrowym kodem pokoju** (lobby → vs Friend →
@@ -25,12 +25,13 @@ Render pobiera go stamtąd sam (nikt inny kodu nie widzi). Oba plany są darmowe
   ograniczone (20 prób na minutę z jednego adresu).
 - **Twoje talie zapisują się w przeglądarce** (dysk darmowego serwera jest czyszczony przy uśpieniu); przy starcie
   gry talia jest wysyłana na serwer i sprawdzana oficjalnymi regułami.
-- Bot liczy na jednym wątku (`BOT_THREADS=1`), więc „Master” myśli wolniej niż na Twoim komputerze.
+- Bot liczy w głównym procesie serwera (`BOT_THREADS=0`: darmowa maszyna ma ułamek jednego rdzenia, osobny wątek
+  tylko podwajał pamięć i na Render nie odpowiadał), więc „Very Hard” i „Master” myślą wolniej niż na Twoim komputerze.
 - Obrazki kart serwer pobiera przy pierwszym użyciu (po uśpieniu od nowa).
 
 ## Kroki (jednorazowo)
-1. **GitHub**: załóż puste, **prywatne** repozytorium (np. `cyberpunk-tcg-ai`, bez README) i podaj mi jego adres —
-   wyślę kod (`git push`; przy pierwszym razie okno logowania GitHub).
+1. **GitHub**: załóż puste repozytorium (np. `cyberpunk-tcg-ai`, bez README) i wyślij kod (`git push`;
+   przy pierwszym razie okno logowania GitHub).
 2. **Render** (https://render.com): „Sign up with GitHub”, zezwól na dostęp do tego repozytorium.
 3. Render → **New → Blueprint** → wybierz repozytorium → **Apply**. Po kilku minutach działają obie usługi.
 4. Wejdź na adres strony startowej (`https://cyberpunk-tcg-ai….onrender.com`) — to jest link dla znajomych.
