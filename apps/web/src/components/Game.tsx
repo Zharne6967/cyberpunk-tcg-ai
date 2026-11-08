@@ -128,6 +128,38 @@ function SetupDialog({ state, onAction }: { state: GameStateMessage; onAction: (
   );
 }
 
+/** Win chance from what is openly on the table (learned model on public information). */
+function WinChanceBar({ you }: { you: number }) {
+  const y = Math.round(you * 100);
+  return (
+    <div className="chance" title="Win chance from the cards on the table">
+      <span className="chance-you">{y}%</span>
+      <div className="chance-bar">
+        <div className="chance-fill" style={{ width: `${y}%` }} />
+      </div>
+      <span className="chance-bot">{100 - y}%</span>
+    </div>
+  );
+}
+
+function WinChanceChart({ points }: { points: [number, number][] }) {
+  const w = 300;
+  const h = 80;
+  const maxTurn = Math.max(...points.map((p) => p[0]));
+  const minTurn = Math.min(...points.map((p) => p[0]));
+  const x = (t: number) => ((t - minTurn) / Math.max(1, maxTurn - minTurn)) * w;
+  const y = (p: number) => h - p * h;
+  return (
+    <div className="chance-chart">
+      <div className="small muted">Win chance by turn</div>
+      <svg viewBox={`-4 -4 ${w + 8} ${h + 8}`} width={w} height={h}>
+        <line x1={0} x2={w} y1={h / 2} y2={h / 2} className="mid" />
+        <polyline points={points.map(([t, p]) => `${x(t)},${y(p)}`).join(" ")} />
+      </svg>
+    </div>
+  );
+}
+
 interface MenuItem {
   label: string;
   run: () => void;
@@ -162,6 +194,16 @@ export function Game({ gameId }: { gameId: string }) {
     }
   });
   const [hideResult, setHideResult] = useState(false);
+  const [showChance, setShowChance] = useState(() => {
+    try {
+      return localStorage.getItem("cpai.winChance") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  // Your win chance at the end of each turn (for the chart on the result screen).
+  const chanceByTurn = useRef(new Map<number, number>());
+  if (state?.winChance != null) chanceByTurn.current.set(state.view.turnNumber, state.winChance);
 
   useEffect(() => {
     loadCardDb().then(setDb);
@@ -316,6 +358,21 @@ export function Game({ gameId }: { gameId: string }) {
           Learning mode
         </label>
         <label className="opt">
+          <input
+            type="checkbox"
+            checked={showChance}
+            onChange={(e) => {
+              setShowChance(e.target.checked);
+              try {
+                localStorage.setItem("cpai.winChance", e.target.checked ? "1" : "0");
+              } catch {
+                /* ignore */
+              }
+            }}
+          />{" "}
+          Win chance
+        </label>
+        <label className="opt">
           Bot speed{" "}
           <select
             value={speed}
@@ -355,6 +412,7 @@ export function Game({ gameId }: { gameId: string }) {
                 {phaseText(state)}
                 {state.botThinking && <span className="dots" />}
               </div>
+              {showChance && state.winChance != null && <WinChanceBar you={state.winChance} />}
               {!state.result && state.view.gamePhase !== "setup" && (
                 <button className="btn primary pass" disabled={!myPrompt || choosing} onClick={() => sendIntent({ kind: "pass" })}>
                   {passLabel}
@@ -413,6 +471,7 @@ export function Game({ gameId }: { gameId: string }) {
             <p>
               {RESULT_REASON[state.result.reason ?? ""] ?? state.result.reason ?? ""} · Turn {state.view.turnNumber}
             </p>
+            {chanceByTurn.current.size > 1 && <WinChanceChart points={[...chanceByTurn.current.entries()].sort((a, b) => a[0] - b[0])} />}
             <div className="row">
               <a className="btn primary" href="#/">
                 New game

@@ -101,6 +101,8 @@ export interface GameStateMessage {
   botThinking: boolean;
   /** Instance ids the bot touched in its latest action (for highlighting). */
   botLastCardIds: string[];
+  /** Your chance to win (0..1) from public table information only (learned model), null in setup. */
+  winChance: number | null;
   /** Last ISMCTS search of the bot: simulations run and its estimated chance to win. */
   botInfo: null | { iterations: number; winRate: number; ms: number };
   result: null | { winner: "you" | "bot" | "draw"; reason: string | null };

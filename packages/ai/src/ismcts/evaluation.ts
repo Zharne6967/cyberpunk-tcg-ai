@@ -58,6 +58,33 @@ export function learnedWinProbability(state: MatchState, pid: PlayerId, m: EvalM
   return predict(m, positionFeatures(filterMatchView(state, pid), pid as string));
 }
 
+/** The view with every hand reduced to its card count: only what lies openly on the table. */
+export function publicView(view: FilteredMatchView): FilteredMatchView {
+  return {
+    ...view,
+    players: Object.fromEntries(
+      Object.entries(view.players).map(([id, p]) => {
+        const hand = p.zones.hand;
+        return [id, { ...p, zones: { ...p.zones, hand: Array.isArray(hand) ? hand.length : (hand ?? 0) } }];
+      }),
+    ),
+  };
+}
+
+/**
+ * Chance that `pid` wins the game, from public table information only (no hand contents, no deck
+ * order). The model is evaluated from both players' perspectives and averaged, so it does not
+ * depend on whose turn it is being scored for.
+ */
+export function publicWinChance(view: FilteredMatchView, pid: string, m: EvalModel = DEFAULT_MODEL): number {
+  if (view.gameEnded) return view.winnerId === pid ? 1 : view.winnerId ? 0 : 0.5;
+  const pv = publicView(view);
+  const rival = Object.keys(pv.players).find((id) => id !== pid) ?? pid;
+  const mine = predict(m, positionFeatures(pv, pid));
+  const theirs = predict(m, positionFeatures(pv, rival));
+  return (mine + (1 - theirs)) / 2;
+}
+
 /** Fit a logistic regression (standardized features, L2, full-batch gradient descent). */
 export function fitLogistic(xs: number[][], ys: number[], opts: { iterations?: number; lr?: number; l2?: number } = {}): EvalModel {
   const n = xs.length;

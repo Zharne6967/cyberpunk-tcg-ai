@@ -94,7 +94,7 @@ export function labelAction(move: string, args: Record<string, unknown> | undefi
       return { label: "Pass", group: "phase" };
     }
     case "resolveAttack":
-      return { label: "Continue", group: "phase" };
+      return { label: a.pass ? "Pass" : "Continue", group: "phase" };
     case "resolveTrigger":
       return a.pass ? { label: "Decline", group: "choice" } : { label: "Resolve", group: "choice" };
     case "resolveEffectTarget": {

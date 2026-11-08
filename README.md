@@ -27,6 +27,10 @@ Stół wygląda jak dwie maty naprzeciw siebie: Twoja na dole, bota (obrócona) 
 - Gdy zasady każą coś wybrać (cel, kość Giga, kolejność efektów), po prawej pojawia się panel decyzji;
   możesz też kliknąć kartę/kość na stole.
 - **Enter** albo przycisk w środku stołu = **Pass Turn** / **Pass**.
+- **Win chance** (przełącznik u góry, domyślnie włączony) — pasek w środku stołu z szansą każdego gracza
+  na wygranie całej partii, liczoną wyłącznie z tego, co leży na stole (Gigi, pole, Legendy, Eddies,
+  liczba kart w rękach i taliach — bez zaglądania w karty). To wyuczony model z partii testowych
+  (`pnpm calibrate`), więc to szacunek, nie wyrocznia. Na koniec partii — wykres szans tura po turze.
 - **Learning mode** (przełącznik u góry) — podświetla karty z legalnymi ruchami i pokazuje listę akcji.
   Domyślnie wyłączony: grasz jak na żywo i sam pamiętasz, co możesz zrobić.
 - Każda partia zapisuje się w `var/games/` — z tych zapisów bot będzie się uczył (etap 6).

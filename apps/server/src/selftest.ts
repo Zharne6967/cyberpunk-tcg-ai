@@ -34,6 +34,8 @@ function intentFor(a: UiAction): Intent | null {
       return { kind: "activate", cardId: g("cardId") };
     case "passPhase":
       return { kind: "pass" };
+    case "resolveAttack":
+      return (a.args ?? {}).pass === true ? { kind: "pass" } : null;
     case "gainGig":
       return g("dieId") ? { kind: "select", id: g("dieId") } : null;
     default:

@@ -14,7 +14,7 @@ import {
   type GameEvent,
   type PlayerId,
 } from "@tcg/cyberpunk-engine";
-import { KnowledgeTracker, STRATEGIES, decideBotCommand, expandAtomicGigAdjust } from "@cpai/ai";
+import { KnowledgeTracker, STRATEGIES, decideBotCommand, expandAtomicGigAdjust, publicWinChance } from "@cpai/ai";
 import { getCatalog, toEngineDeckList, type Deck } from "@cpai/core";
 import type { GameStateMessage, Intent, LogLine, MatchView, ServerMessage, UiAction } from "@cpai/core/protocol";
 import { botPool } from "./bot-pool.ts";
@@ -124,6 +124,7 @@ export class GameSession {
       botThinking: this.botThinking,
       botLastCardIds: this.botLastCardIds,
       botInfo: this.botInfo,
+      winChance: view.gamePhase === "setup" ? null : publicWinChance(view as never, HUMAN as string),
       result,
     };
   }
@@ -283,7 +284,9 @@ export class GameSession {
         probe = { move: "goSolo", args: { cardId: intent.cardId } };
         break;
       case "pass":
+        // Main Phase: pass the turn. React Step: no reaction (the engine's resolveAttack pass).
         matches = this.actions.filter((a) => a.move === "passPhase");
+        if (!matches.length) matches = this.actions.filter((a) => a.move === "resolveAttack" && arg(a, "pass") === true);
         break;
       case "select": {
         const keys = ["cardId", "dieId", "targetIds", "cardIds", "dieIds", "legendId", "blockerId"];
