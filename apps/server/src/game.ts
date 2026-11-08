@@ -421,7 +421,8 @@ export class GameSession {
 
   concede(seat: SeatId) {
     if (!this.engine) return;
-    this.apply(seat, "concede", undefined);
+    const r = this.apply(seat, "concede", {});
+    if (!r.success) this.notify(seat, { type: "error", message: (r as { error?: string }).error ?? "Cannot concede now." });
     this.refreshActions();
     this.broadcast();
   }

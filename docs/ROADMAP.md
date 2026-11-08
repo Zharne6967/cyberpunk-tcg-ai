@@ -53,6 +53,14 @@ Do zrobienia w etapie 4:
 - wybór celów efektów kliknięciem na stole z lepszą informacją zwrotną; Scry jako przeciąganie kart;
 - ręczny test całej partii przez gracza i poprawki z jego uwag.
 
+## Etap 5c — Analiza talii rywala i kontr-talia (prośba gracza, plan)
+Wklejasz talię (lista/ID) → raport: (1) słabości — krzywa, Eddies/sprzedaż, RAM, zależność od kluczowych
+kart, wyniki symulacji vs pula talii (`pnpm bench` po stronie serwera, ISMCTS), w których dopasowaniach przegrywa
+i dlaczego (statystyki z partii: tempo, Gigi, defeat kluczowych jednostek); (2) jak ją kontrować — konkretne
+karty/strategie, które w symulacjach najbardziej obniżają jej win rate; (3) proponowana talia przeciw niej —
+najlepsza z istniejących + warianty z deck buildera (zamiana kart, weryfikacja tysiącami symulacji, etap 8).
+Pierwszy krok: endpoint `POST /api/analyze` uruchamiający gauntlet w puli wątków + ekran raportu.
+
 ## Etap 5b — Gra ze znajomym i telefon (stan 2026-11-08)
 Zrobione: lobby „vs Bot / vs Friend” + imię; pokój (`POST /api/rooms`) → poczekalnia z linkiem
 `#/join/<gra>/<zaproszenie>`; kolega wybiera talię albo wkleja listę; tokeny miejsc (WebSocket tylko z tokenem);

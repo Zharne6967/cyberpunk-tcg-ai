@@ -246,6 +246,8 @@ export function Game({ gameId }: { gameId: string }) {
   const [preview, setPreview] = useState<{ card: CardView; rect: DOMRect; touch: boolean } | null>(null);
   // Phone layout: the log is a bottom sheet, the options live behind "⋯".
   const [logOpen, setLogOpen] = useState(false);
+  // In-page confirmation: browser confirm() dialogs can be blocked (e.g. in embedded browsers).
+  const [confirmConcede, setConfirmConcede] = useState(false);
   const [optsOpen, setOptsOpen] = useState(false);
   const [showChance, setShowChance] = useState(() => {
     try {
@@ -456,8 +458,12 @@ export function Game({ gameId }: { gameId: string }) {
           </select>
         </label>
         {!state.result && (
-          <button className="btn danger small" onClick={() => confirm("Concede this game?") && send({ type: "concede" })}>
-            Concede
+          <button
+            className="btn danger small"
+            onClick={() => (confirmConcede ? (send({ type: "concede" }), setConfirmConcede(false)) : setConfirmConcede(true))}
+            onBlur={() => setConfirmConcede(false)}
+          >
+            {confirmConcede ? "Confirm concede" : "Concede"}
           </button>
         )}
         </div>
