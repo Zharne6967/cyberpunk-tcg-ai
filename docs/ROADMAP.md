@@ -58,7 +58,11 @@ Do zrobienia w etapie 4:
 (strona otwarta, talie w przeglądarce, limit zgadywania kodów, CORS dla /api/health), strona startowa z ekranem
 ładowania (`landing/`), `render.yaml` (Static Site zawsze włączony + Free web service usypiany), instrukcja
 [`docs/DEPLOY.md`](DEPLOY.md). Testy: `CPAI_CLOUD=1 pnpm selftest 2 friend` ✓, API trybu online ✓.
-Czeka na gracza: prywatne repo na GitHubie + konto Render (Blueprint → Apply).
+✅ **Działa w internecie**: https://cyberpunk-tcg-ai.onrender.com (publiczne repo GitHub + Render Blueprint, darmowe;
+każdy `git push` na `main` wdraża się sam). Sprawdzone online: gra z botem (Very Hard: tura ~10–20 s), pokój ze
+znajomym przez 6-cyfrowy kod, poddanie, widok telefonu, przekierowanie linku zaproszenia przez stronę startową.
+Na Render boty liczą w głównym procesie (`BOT_THREADS=0`) — wątki robocze tam nie odpowiadały.
+Do sprawdzenia przy okazji: ekran ładowania po uśpieniu serwera (po ~15 min bez graczy).
 
 ## Prośby gracza (2026-11-08) — do rozplanowania na początku następnej sesji
 - **Strona dostępna zawsze, dla każdego** (hosting w chmurze, np. Fly.io / Render / mały VPS, serwer działa 24/7 bez
