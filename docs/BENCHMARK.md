@@ -52,3 +52,19 @@ A = `ismcts-fast` `{}`, B = `tactical`
 | Overwatch — Recharge Control vs Johnny — Fight, Ready and Steal | 4/4 |
 | Red/Yellow/Blue — Low-Cost Tempo vs Dexter / Dum Dum / River — Gear Aggro (Top 16) | 4/4 |
 | The Heist Starter Deck vs Relic + Placide — Surgical Reanimation | 4/4 |
+
+## Master (ISMCTS 1200) vs Hard (2026-11-08)
+A = `ismcts` `{}`, B = `masterful`
+
+**A wygrywa 16/16 = 100.0%** (95% CI 81–100%), czas decyzji A 9028 ms, B 59 ms (1 wątek na partię, 15 partii naraz).
+
+| Para talii (A vs B) | wygrane A |
+|---|---|
+| Alt + Gears — Multiplied Economy vs Hanako + Netdriver — Gigs as Draw Engine | 2/2 |
+| Judy — Top-of-Deck Discount, Not a Guaranteed Top vs Yorinobu — Two Units for the Price of One | 2/2 |
+| RRY — Detonate gear curve vs Overwatch — Recharge Control | 2/2 |
+| Dexter / Dum Dum / River — Gear Aggro (Top 16) vs Alt + Gears — Multiplied Economy | 2/2 |
+| Cyberpsychosis + Deadman — Burst with Insurance vs RRY — Steel Dragon on curve | 2/2 |
+| Overwatch — Recharge Control vs Johnny — Fight, Ready and Steal | 2/2 |
+| Red/Yellow/Blue — Low-Cost Tempo vs Dexter / Dum Dum / River — Gear Aggro (Top 16) | 2/2 |
+| The Heist Starter Deck vs Relic + Placide — Surgical Reanimation | 2/2 |

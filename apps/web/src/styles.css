@@ -414,3 +414,49 @@ a { color: var(--cyan); }
 .spinner-line { color: var(--muted); }
 .deck-paste { min-height: 160px; background: #101014; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 8px; font: 12.5px ui-monospace, Consolas, monospace; width: 100%; }
 .paste-toggle { margin-left: 100px; }
+
+/* ---------- card preview (hover / press-and-hold) and pointer drag ---------- */
+.preview-hover { position: fixed; z-index: 35; pointer-events: none; filter: drop-shadow(0 12px 30px #000c); animation: fadein .12s ease-out; }
+.preview-live { margin-top: 6px; background: #0b0b0e; border: 1px solid var(--mat-line); border-radius: 4px; padding: 6px 8px; font-size: 12.5px; max-width: 300px; }
+.preview-touch { position: fixed; inset: 0; z-index: 35; background: #000c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; }
+.preview-touch .card-face.lg { width: min(300px, 82vw); height: auto; aspect-ratio: 5 / 7; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+.tcard.draggable { touch-action: none; cursor: grab; }
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; opacity: .9; filter: drop-shadow(0 10px 20px #000); }
+.drag-source { opacity: .35; }
+
+/* ---------- phone layout ---------- */
+.mobile-only { display: none; }
+@media (max-width: 760px) {
+  :root { --card-w: 50px; --card-h: 70px; --sm-w: 36px; --sm-h: 50px; --xs-w: 22px; --xs-h: 31px; --die: 24px; }
+  .mobile-only { display: inline-block; }
+  .topbar { gap: 6px; padding: 4px 8px; }
+  .topbar .vs { display: none; }
+  .top-opts { display: none; position: fixed; top: 38px; right: 6px; z-index: 40; flex-direction: column; align-items: flex-start; gap: 8px; background: #0b0b0e; border: 1px solid var(--yellow); padding: 10px; border-radius: 4px; }
+  .top-opts.open { display: flex; }
+  .table-wrap { grid-template-columns: 1fr; }
+  .tabletop { padding: 4px; gap: 4px; }
+  .mat { gap: 4px; padding: 4px; }
+  .mat-label { font-size: 7px; line-height: 10px; }
+  .mat.mine { grid-template-columns: 30px 1fr 44px; }
+  .mat.rival { grid-template-columns: 44px 1fr 30px; }
+  .mat-field { min-height: calc(var(--card-h) + 14px); padding: 6px 4px; }
+  .field-cards { gap: 6px; }
+  .legend-slots { min-width: 0; gap: 3px; }
+  .pile-count, .eddie-count, .gig-count { font-size: 10px; }
+  .center-strip { grid-template-columns: 1fr 1.3fr 1fr; gap: 4px; }
+  .gig-area { padding: 8px 4px 4px; gap: 3px; flex-wrap: wrap; }
+  .phase-text { font-size: 9px; }
+  .btn.pass { padding: 4px 10px; font-size: 12px; }
+  .hand.mine { justify-content: center; }
+  .hand.mine .tcard + .tcard { margin-left: calc(var(--card-w) * -0.3); }
+  .sidebar { position: fixed; left: 0; right: 0; bottom: 0; height: 55vh; z-index: 30; background: var(--bg); border-top: 1px solid var(--yellow); display: none; }
+  .sidebar.open, .sidebar.has-decision { display: flex; }
+  .sidebar.has-decision:not(.open) { height: auto; max-height: 50vh; }
+  .sidebar.has-decision:not(.open) .log-panel, .sidebar.has-decision:not(.open) .sheet-close { display: none; }
+  .lobby.compact { padding: 16px 10px; }
+  .lobby-row { grid-template-columns: 1fr; gap: 4px; }
+  .level-desc, .paste-toggle { margin-left: 0; }
+  .builder-bar { gap: 4px; }
+  .deck-name-input { width: 140px; }
+}

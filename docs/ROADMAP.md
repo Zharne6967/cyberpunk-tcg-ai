@@ -9,7 +9,7 @@ Każdy etap to osobna sesja pracy, zakończona działającą wersją i paczką Z
 | 3 | Silny, uczciwy bot | determinizacja ukrytych kart + ISMCTS w wątkach roboczych, poziomy trudności, benchmark vs obecne boty | 🔶 działa (Very Hard bije Hard 81%), strojenie trwa |
 | 4 | Stół jak na żywo | rewersy kart, ukryte własne Legendy (zgodnie z CR), losowanie pierwszego gracza w okienku, przeciąganie kart na strefy, tryb „bez podpowiedzi” | 🔶 wersja 1 gotowa |
 | 5 | Deck builder | panel składania talii: wyszukiwarka i filtry kart, legalność na żywo, krzywa/kolory, zapis/eksport/import listy | 🔶 wersja 1 gotowa |
-| 5b | Gra ze znajomym przez internet | kolega gra u siebie: (A) ta sama aplikacja u niego (ZIP + `instaluj.bat`) vs bot, (B) mecz człowiek–człowiek: pokoje z kodem, dwa ludzkie miejsca, każdy widzi tylko swoje karty, dostęp przez Tailscale/Cloudflare Tunnel albo mały serwer w chmurze | plan na później |
+| 5b | Gra ze znajomym + telefon | pokoje z linkiem zaproszenia (człowiek–człowiek, każdy widzi tylko swoje karty), klucz dostępu dla urządzeń z zewnątrz, Cloudflare quick tunnel z poziomu poczekalni, przeciąganie palcem, podgląd karty po najechaniu / przytrzymaniu, układ na telefon | 🔶 wersja 1 (patrz niżej) |
 | 6 | Uczenie się | zapis każdej partii, nocny self-play, strojenie oceny pozycji, „bramka” (nowa wersja musi pokonać starą), raport czego się nauczył, model Twojego stylu gry | |
 | 7 | Talie z sieci | importery (tcgcontender, ripperdeck, choombattler, exburst, tekst), snapshot mety, gauntlet, analiza talii w UI (krzywa, Eddies, aggro, tempo kluczowych kart) | |
 | 8 | AI deck builder | generowanie talii + weryfikacja tysiącami symulacji vs meta, wyjaśnienia wyborów | |
@@ -52,6 +52,21 @@ Do zrobienia w etapie 4:
 - dopracowanie wyglądu maty (kształty kości, opcjonalny własny skan maty jako tło), układ dla ekranów < 900 px wysokości;
 - wybór celów efektów kliknięciem na stole z lepszą informacją zwrotną; Scry jako przeciąganie kart;
 - ręczny test całej partii przez gracza i poprawki z jego uwag.
+
+## Etap 5b — Gra ze znajomym i telefon (stan 2026-11-08)
+Zrobione: lobby „vs Bot / vs Friend” + imię; pokój (`POST /api/rooms`) → poczekalnia z linkiem
+`#/join/<gra>/<zaproszenie>`; kolega wybiera talię albo wkleja listę; tokeny miejsc (WebSocket tylko z tokenem);
+`apps/server/src/share.ts` — klucz dostępu (cookie) dla wszystkiego spoza tego komputera, zapis/usuwanie talii
+i start tunelu tylko lokalnie, przycisk „Share over the internet” uruchamia `cloudflared` (quick tunnel);
+przeciąganie na pointer events (mysz + palec), podgląd karty po 0,45 s najechania / przytrzymaniu palcem;
+pierwsza wersja CSS pod telefon (log jako wysuwany panel, opcje pod „⋯”). `pnpm selftest 2 friend` ✓.
+
+Do zrobienia (następna sesja):
+1. Zainstalować `cloudflared` (`winget install Cloudflare.cloudflared` — wymaga zgody) i przetestować link z telefonu.
+2. Dopracować układ na telefon w przeglądarce (sprawdzić na 375×812), mulligan na pełnym ekranie jak w Choombattlerze,
+   kod QR z linkiem zaproszenia.
+3. Podgląd po najechaniu także w Deck Builderze.
+4. Skrypt `udostepnij.bat` (start serwera + tunel jednym kliknięciem).
 
 ## Etap 5 — Deck builder
 Wzory od gracza: deck builder https://cyberpunk-tcg-sim.online/deck-builder/ (układ, filtry, statystyki)

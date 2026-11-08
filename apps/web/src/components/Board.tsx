@@ -1,7 +1,8 @@
-import { useState, type DragEvent, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import type { CardView, GameStateMessage, Intent, PlayerView, UiAction } from "@cpai/core/protocol";
 import type { CardDb } from "../api.ts";
 import { CardBack, CardFace, type CardSize } from "./CardFace.tsx";
+import { clickSuppressed, startPointerDrag, suppressNextClick } from "./drag.ts";
 
 /**
  * The table, laid out like the official playmat: each player has a Fixer column (D20…D4), the field,
@@ -26,6 +27,8 @@ export interface BoardCtx {
   onInspect: (card: CardView) => void;
   onIntent: (intent: Intent) => void;
   onTrash: (seat: string) => void;
+  /** Card details on hover (mouse) or press-and-hold (touch); null hides it. */
+  onPreview: (card: CardView | null, anchor?: DOMRect, touch?: boolean) => void;
 }
 
 // One drag at a time; module state keeps drag-over re-renders cheap.
@@ -50,8 +53,31 @@ function zoneCount(p: PlayerView, name: string): number {
   return Array.isArray(z) ? z.length : (z ?? 0);
 }
 
+type DropTarget = { kind: "field" | "eddies" | "rivalGigs" } | { kind: "card"; card: CardView };
+
+/** Data attributes that make an element a drop zone (found under the pointer on release). */
+function dropAttrs(kind: "field" | "eddies" | "rivalGigs" | "card", cardId?: string): Record<string, string> {
+  return cardId ? { "data-drop": kind, "data-card-id": cardId } : { "data-drop": kind };
+}
+
+function findCard(s: GameStateMessage, id: string): CardView | undefined {
+  for (const p of Object.values(s.view.players))
+    for (const z of Object.values(p.zones)) if (Array.isArray(z)) for (const c of z) if (c.instanceId === id) return c;
+  return undefined;
+}
+
+function targetFromElement(s: GameStateMessage, el: HTMLElement | null): DropTarget | null {
+  const kind = el?.dataset.drop;
+  if (kind === "field" || kind === "eddies" || kind === "rivalGigs") return { kind };
+  if (kind === "card") {
+    const card = findCard(s, el!.dataset.cardId ?? "");
+    return card ? { kind: "card", card } : null;
+  }
+  return null;
+}
+
 /** What dropping the current drag onto `target` means (null = nothing). */
-function dropIntent(ctx: BoardCtx, target: { kind: "field" | "eddies" | "rivalGigs" } | { kind: "card"; card: CardView }): Intent | null {
+function dropIntent(ctx: BoardCtx, target: DropTarget): Intent | null {
   const d = dragging;
   if (!d) return null;
   const you = ctx.state.you;
@@ -76,40 +102,18 @@ function ownerOf(s: GameStateMessage, id: string): string | undefined {
   return undefined;
 }
 
-/** Drop-zone props: a plain hover outline while something is dragged over (no legality hints). */
-function useDrop(ctx: BoardCtx, target: Parameters<typeof dropIntent>[1]) {
-  const [over, setOver] = useState(false);
-  return {
-    over,
-    props: {
-      onDragOver: (e: DragEvent) => {
-        if (!dragging) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (!over) setOver(true);
-      },
-      onDragLeave: () => setOver(false),
-      onDrop: (e: DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setOver(false);
-        const intent = dropIntent(ctx, target);
-        dragging = null;
-        if (intent) ctx.onIntent(intent);
-      },
-    },
-  };
-}
-
 function PowerBadge({ c }: { c: CardView }) {
   if (c.zone !== "field" || (c.type !== "unit" && c.type !== "legend")) return null;
   const diff = c.effectivePower - c.power;
   return <span className={`pow ${diff > 0 ? "up" : diff < 0 ? "down" : ""}`}>{c.effectivePower}</span>;
 }
 
+const PREVIEW_DELAY = 450;
+const LONG_PRESS = 500;
+
 export function TableCard({ c, ctx, size = "md", dragFrom, dropTarget }: { c: CardView; ctx: BoardCtx; size?: CardSize; dragFrom?: DragInfo["from"]; dropTarget?: boolean }) {
   const data = cardData(ctx.db, c);
-  const drop = useDrop(ctx, { kind: "card", card: c });
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const acts = ctx.hints ? ctx.actionsByCard.get(c.instanceId) : undefined;
   const placeKey = `${c.zone}:${c.instanceId}`;
   armTimer ??= setTimeout(() => (landingArmed = true), 800);
@@ -123,28 +127,63 @@ export function TableCard({ c, ctx, size = "md", dragFrom, dropTarget }: { c: Ca
     acts?.length ? "actionable" : "",
     ctx.highlight.has(c.instanceId) ? "hl" : "",
     ctx.state.rivalLastCardIds.includes(c.instanceId) ? "bot-last" : "",
-    drop.over ? "drop-over" : "",
+    dragFrom && !(c.faceDown && !data) ? "draggable" : "",
   ].join(" ");
   const canDrag = !!dragFrom && !(c.faceDown && !data);
+  const cancelTimer = () => clearTimeout(timer.current);
   return (
     <div
       className={cls}
-      draggable={canDrag}
-      onDragStart={(e) => {
-        dragging = { cardId: c.instanceId, from: dragFrom! };
-        e.dataTransfer.setData("text/plain", c.instanceId);
-        e.dataTransfer.effectAllowed = "move";
+      {...(dropTarget ? dropAttrs("card", c.instanceId) : {})}
+      onPointerEnter={(e) => {
+        // Mouse: show the card's details after a short hover, no click needed.
+        if (e.pointerType !== "mouse" || !data) return;
+        const el = e.currentTarget;
+        cancelTimer();
+        timer.current = setTimeout(() => ctx.onPreview(c, el.getBoundingClientRect(), false), PREVIEW_DELAY);
       }}
-      onDragEnd={() => (dragging = null)}
+      onPointerLeave={(e) => {
+        cancelTimer();
+        if (e.pointerType === "mouse") ctx.onPreview(null);
+      }}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        cancelTimer();
+        if (e.pointerType !== "mouse" && data) {
+          // Touch: press and hold to see the card.
+          const el = e.currentTarget;
+          timer.current = setTimeout(() => {
+            suppressNextClick();
+            ctx.onPreview(c, el.getBoundingClientRect(), true);
+          }, LONG_PRESS);
+        }
+        if (!canDrag) return;
+        startPointerDrag(e.nativeEvent, e.currentTarget, {
+          onStart: () => {
+            cancelTimer();
+            ctx.onPreview(null);
+            dragging = { cardId: c.instanceId, from: dragFrom! };
+          },
+          onDrop: (el) => {
+            const target = targetFromElement(ctx.state, el);
+            const intent = target ? dropIntent(ctx, target) : null;
+            dragging = null;
+            if (intent) ctx.onIntent(intent);
+          },
+        });
+      }}
+      onPointerUp={cancelTimer}
+      onPointerCancel={cancelTimer}
       onClick={(e) => {
         e.stopPropagation();
+        if (clickSuppressed()) return;
+        ctx.onPreview(null);
         ctx.onCardClick(c, e.currentTarget);
       }}
       onContextMenu={(e) => {
         e.preventDefault();
         if (data) ctx.onInspect(c);
       }}
-      {...(dropTarget ? drop.props : {})}
     >
       <div className="tcard-inner">{c.faceDown && !data ? <CardBack size={size} kind={c.zone === "legendArea" ? "legend" : "deck"} /> : <CardFace card={data} size={size} showText={size === "md" || size === "lg"} />}</div>
       <PowerBadge c={c} />
@@ -233,12 +272,11 @@ function Fixer({ p, ctx }: { p: PlayerView; ctx: BoardCtx }) {
 export function GigArea({ seat, ctx, label, rival }: { seat: string; ctx: BoardCtx; label: string; rival: boolean }) {
   const p = ctx.state.view.players[seat]!;
   const gigs = zone(p, "gigArea");
-  const drop = useDrop(ctx, { kind: "rivalGigs" });
   return (
     <div
-      className={`gig-area ${rival ? "rival" : "friendly"} ${drop.over ? "drop-over" : ""}`}
+      className={`gig-area ${rival ? "rival" : "friendly"}`}
       onClick={() => ctx.onGigAreaClick(seat)}
-      {...(rival ? drop.props : {})}
+      {...(rival ? dropAttrs("rivalGigs") : {})}
     >
       <div className="mat-label">{label}</div>
       <div className="gig-dice">
@@ -254,12 +292,11 @@ export function GigArea({ seat, ctx, label, rival }: { seat: string; ctx: BoardC
 }
 
 function Field({ p, ctx, mine }: { p: PlayerView; ctx: BoardCtx; mine: boolean }) {
-  const drop = useDrop(ctx, { kind: "field" });
   const all = new Map<string, CardView>();
   for (const z of Object.values(p.zones)) if (Array.isArray(z)) for (const c of z) all.set(c.instanceId, c);
   const units = zone(p, "field").filter((c) => !c.attachedToId);
   return (
-    <div className={`mat-field ${drop.over ? "drop-over" : ""}`} {...(mine ? drop.props : {})}>
+    <div className="mat-field" {...(mine ? dropAttrs("field") : {})}>
       <div className="mat-label">FIELD</div>
       <div className="field-cards">
         {units.map((c) => {
@@ -295,10 +332,9 @@ function Legends({ p, ctx, mine }: { p: PlayerView; ctx: BoardCtx; mine: boolean
 }
 
 function Eddies({ p, ctx, mine }: { p: PlayerView; ctx: BoardCtx; mine: boolean }) {
-  const drop = useDrop(ctx, { kind: "eddies" });
   const cards = zone(p, "eddieArea");
   return (
-    <div className={`mat-eddies ${drop.over ? "drop-over" : ""}`} {...(mine ? drop.props : {})}>
+    <div className="mat-eddies" {...(mine ? dropAttrs("eddies") : {})}>
       <div className="mat-label">EDDIES</div>
       <div className="eddie-cards">
         {cards.map((c) => (

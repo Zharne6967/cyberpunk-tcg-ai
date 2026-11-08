@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CardView, ClientMessage, GameStateMessage, Intent, ServerMessage, UiAction, WaitingMessage } from "@cpai/core/protocol";
 import { api, loadCardDb, seatTicket, type CardDb } from "../api.ts";
 import { WaitingRoom } from "./Rooms.tsx";
+import { CardFace } from "./CardFace.tsx";
 import { GigArea, Mat, RivalHand, Strip, YourHand, cardData, type BoardCtx } from "./Board.tsx";
 import { ActionPanel, DecisionPanel, Inspector, LogPanel, OptionsModal, TrashModal, phaseText } from "./Panels.tsx";
 
@@ -135,6 +136,47 @@ function SetupDialog({ state, onAction }: { state: GameStateMessage; onAction: (
   );
 }
 
+/**
+ * Card details without clicking: next to the card after a short mouse hover, or centred after a
+ * press-and-hold on a touch screen (tap anywhere to close).
+ */
+function CardPreview({ db, preview, onClose, onDetails }: { db: CardDb; preview: { card: CardView; rect: DOMRect; touch: boolean }; onClose: () => void; onDetails: () => void }) {
+  const data = cardData(db, preview.card);
+  if (!data) return null;
+  const c = preview.card;
+  const live = c.zone === "field" && (c.effectivePower !== c.power || c.activeEffects.length > 0) && (
+    <div className="preview-live">
+      {c.effectivePower !== c.power && <div>Power {c.effectivePower}</div>}
+      {c.activeEffects.map((e) => (
+        <div key={e.id} className={`fx-line ${e.tone}`}>
+          {e.sourceName}: {e.label}
+        </div>
+      ))}
+    </div>
+  );
+  if (preview.touch)
+    return (
+      <div className="preview-touch" onClick={onClose}>
+        <CardFace card={data} size="lg" />
+        {live}
+        <button className="btn small" onClick={(e) => (e.stopPropagation(), onDetails())}>
+          Rulings
+        </button>
+      </div>
+    );
+  const w = 300;
+  const h = 420;
+  const r = preview.rect;
+  const left = r.right + 12 + w < window.innerWidth ? r.right + 12 : Math.max(8, r.left - 12 - w);
+  const top = Math.min(Math.max(8, r.top + r.height / 2 - h / 2), window.innerHeight - h - 8);
+  return (
+    <div className="preview-hover" style={{ left, top }}>
+      <CardFace card={data} size="lg" />
+      {live}
+    </div>
+  );
+}
+
 /** Win chance from what is openly on the table (learned model on public information). */
 function WinChanceBar({ you }: { you: number }) {
   const y = Math.round(you * 100);
@@ -201,6 +243,10 @@ export function Game({ gameId }: { gameId: string }) {
     }
   });
   const [hideResult, setHideResult] = useState(false);
+  const [preview, setPreview] = useState<{ card: CardView; rect: DOMRect; touch: boolean } | null>(null);
+  // Phone layout: the log is a bottom sheet, the options live behind "⋯".
+  const [logOpen, setLogOpen] = useState(false);
+  const [optsOpen, setOptsOpen] = useState(false);
   const [showChance, setShowChance] = useState(() => {
     try {
       return localStorage.getItem("cpai.winChance") !== "0";
@@ -334,6 +380,7 @@ export function Game({ gameId }: { gameId: string }) {
     onInspect: view,
     onIntent: sendIntent,
     onTrash: setTrashSeat,
+    onPreview: (card, rect, touch) => setPreview(card && rect ? { card, rect, touch: !!touch } : null),
   };
 
   const myPrompt = state.promptStatus === "action" || state.promptStatus === "choice";
@@ -341,7 +388,7 @@ export function Game({ gameId }: { gameId: string }) {
   const trashCards = trashSeat ? ((state.view.players[trashSeat]!.zones.trash as CardView[]) ?? []) : [];
 
   return (
-    <div className="game" onClick={() => menu && setMenu(null)}>
+    <div className="game" onClick={() => (menu && setMenu(null), optsOpen && setOptsOpen(false))}>
       <div className="topbar">
         <a href="#/" className="brand">
           CYBERPUNK <span>TCG</span> // AI
@@ -350,6 +397,13 @@ export function Game({ gameId }: { gameId: string }) {
           {state.yourDeck} <b>vs</b> {state.rivalDeck} <span className="muted">({state.rivalLabel})</span>
         </span>
         <span className="spacer" />
+        <button className="btn small mobile-only" onClick={(e) => (e.stopPropagation(), setLogOpen(!logOpen))}>
+          Log
+        </button>
+        <button className="btn small mobile-only" onClick={(e) => (e.stopPropagation(), setOptsOpen(!optsOpen))}>
+          ⋯
+        </button>
+        <div className={`top-opts ${optsOpen ? "open" : ""}`} onClick={(e) => e.stopPropagation()}>
         <label className="opt">
           <input
             type="checkbox"
@@ -406,6 +460,7 @@ export function Game({ gameId }: { gameId: string }) {
             Concede
           </button>
         )}
+        </div>
         {conn !== "open" && <span className="tag warn">Reconnecting…</span>}
       </div>
 
@@ -432,7 +487,10 @@ export function Game({ gameId }: { gameId: string }) {
           <Mat seat={state.you} ctx={ctx} rival={false} />
           <YourHand ctx={ctx} />
         </div>
-        <aside className="sidebar">
+        <aside className={`sidebar ${logOpen ? "open" : ""} ${choosing ? "has-decision" : ""}`}>
+          <button className="btn small mobile-only sheet-close" onClick={() => setLogOpen(false)}>
+            Close
+          </button>
           <LogPanel log={state.log} rivalName={state.rivalLabel} onCard={(definitionId) => setInspect({ definitionId })} />
           <DecisionPanel s={state} db={db} send={sendCommand} sendAction={sendAction} onHover={setHover} />
           {hints && <ActionPanel s={state} sendAction={sendAction} onHover={setHover} />}
@@ -469,6 +527,7 @@ export function Game({ gameId }: { gameId: string }) {
         />
       )}
       {trashSeat && <TrashModal db={db} cards={trashCards} title={trashSeat === state.you ? "Your trash" : "Rival trash"} onInspect={view} onClose={() => setTrashSeat(null)} />}
+      {preview && !menu && <CardPreview db={db} preview={preview} onClose={() => setPreview(null)} onDetails={() => (setPreview(null), view(preview.card))} />}
       {inspect && <Inspector db={db} definitionId={inspect.definitionId} live={inspect.live} onClose={() => setInspect(null)} />}
       {toast && <div className="toast">{toast}</div>}
       {!state.result && <SetupDialog state={state} onAction={sendAction} />}
