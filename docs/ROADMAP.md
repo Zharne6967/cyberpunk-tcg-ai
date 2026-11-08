@@ -54,6 +54,11 @@ Do zrobienia w etapie 4:
 - ręczny test całej partii przez gracza i poprawki z jego uwag.
 
 ## Prośby gracza (2026-11-08) — do rozplanowania na początku następnej sesji
+- **Strona dostępna zawsze, dla każdego** (hosting w chmurze, np. Fly.io / Render / mały VPS, serwer działa 24/7 bez
+  Twojego komputera) + **dołączanie 6-cyfrowym kodem pokoju** (zamiast długiego linku); do przemyślenia: konta/
+  nicki, limit pokoi, koszt hostingu, gdzie trzymać talie użytkowników.
+- **Usuwanie talii wbudowanych z poziomu strony**: dziś usuwać można tylko własne (★); dodać „ukryj” dla talii
+  z `data/decks` (bez kasowania plików) albo przenoszenie ich do Twoich talii.
 - **AI tworzy talie samo, na bazie mety**: import najczęściej granych talii (etap 7: tcgcontender, ripperdeck,
   choombattler/meta, exburst), regularne odświeżanie; AI ulepsza je (podmiany kart sprawdzane tysiącami
   symulacji, etap 8) i pisze przewodnik „jak na nią grać / jak ją kontrować” (łączy się z 5c).
