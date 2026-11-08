@@ -89,11 +89,19 @@ export function Lobby() {
           CYBERPUNK <span>TCG</span> // AI
         </h1>
         <p>Choose your deck, the bot's deck and the bot level.</p>
+        <a className="btn primary" href="#/builder">
+          Deck Builder
+        </a>
       </header>
       {error && <div className="banner error">{error}</div>}
       <div className="lobby-grid">
         <section className="panel">
-          <h2>Your deck</h2>
+          <h2 className="h-with-link">
+            Your deck
+            <a className="small" href={`#/builder/${yourDeck}`}>
+              Open in Deck Builder
+            </a>
+          </h2>
           <DeckList decks={decks} db={db} value={yourDeck} onChange={setYourDeck} />
         </section>
         <section className="panel">

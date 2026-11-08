@@ -1,4 +1,4 @@
-import type { BotSummary, DeckSummary, NewGameRequest } from "@cpai/core/protocol";
+import type { BotSummary, DeckCheck, DeckData, DeckSummary, NewGameRequest } from "@cpai/core/protocol";
 
 export interface CardData {
   id: string;
@@ -46,8 +46,15 @@ export function loadCardDb(): Promise<CardDb> {
   return dbPromise;
 }
 
+const json = (method: string, body: unknown): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
 export const api = {
   decks: () => getJson<DeckSummary[]>("/api/decks"),
+  deck: (id: string) => getJson<DeckData>(`/api/decks/${encodeURIComponent(id)}`),
+  checkDeck: (deck: DeckData) => getJson<DeckCheck>("/api/decks/check", json("POST", { deck })),
+  saveDeck: (deck: DeckData) => getJson<DeckSummary>(`/api/decks/${encodeURIComponent(deck.id)}`, json("PUT", deck)),
+  deleteDeck: (id: string) => getJson<{ ok: boolean }>(`/api/decks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  importDeck: (text: string, name?: string) => getJson<{ deck: DeckData; unresolved: { line: string; name: string }[] }>("/api/decks/import", json("POST", { text, name })),
   bots: () => getJson<BotSummary[]>("/api/bots"),
   newGame: (req: NewGameRequest) =>
     getJson<{ gameId: string }>("/api/games", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req) }),

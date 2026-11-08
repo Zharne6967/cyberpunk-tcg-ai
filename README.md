@@ -4,8 +4,8 @@ Nieoficjalny projekt fanowski (niepowiązany z CD PROJEKT RED ani WeirdCo). Apli
 lokalnie na Twoim komputerze: grasz w przeglądarce przeciwko botowi, który zna wszystkie karty,
 gra zgodnie z oficjalnymi zasadami, analizuje talie i uczy się na błędach.
 
-> Stan: **etap 3 z 8 (w toku)** — można grać w przeglądarce przeciwko botowi, w tym nowym uczciwym
-> botowi ISMCTS („Bardzo trudny”, „Mistrz”). Uczący się bot — etap 4. Plan: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> Stan: **etapy 3–5 w toku** — gra w przeglądarce na stole jak oficjalna mata (przeciąganie kart,
+> bez podpowiedzi), uczciwy bot ISMCTS (Very Hard, Master) i Deck Builder. Uczący się bot — etap 6. Plan: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Szybki start (Windows)
 1. Zainstaluj **Node.js LTS** z https://nodejs.org (jeśli jeszcze nie masz).
@@ -30,6 +30,17 @@ Stół wygląda jak dwie maty naprzeciw siebie: Twoja na dole, bota (obrócona) 
 - **Learning mode** (przełącznik u góry) — podświetla karty z legalnymi ruchami i pokazuje listę akcji.
   Domyślnie wyłączony: grasz jak na żywo i sam pamiętasz, co możesz zrobić.
 - Każda partia zapisuje się w `var/games/` — z tych zapisów bot będzie się uczył (etap 6).
+
+## Deck Builder
+Przycisk **Deck Builder** w lobby (albo „Open in Deck Builder” przy Twojej talii).
+- **Library** po lewej: klik w kartę dodaje ją do talii (Legenda trafia do obszaru Legend), prawy klik —
+  podgląd. Wyszukiwarka rozumie filtry, np. `type:unit cost<=3 color:blue`, `ram>=2`, `tag:netrunner`,
+  `kw:blocker`, `sell:yes`; do tego przyciski Type / Color / Cost / RAM i „Match Legends RAM”.
+- **Talia** po prawej: Legendy z RAM-em na kolor, karty z licznikami (+/−), statystyki, krzywa kosztów,
+  status legalności (oficjalne reguły) i „Draw Starting Hand”.
+- **Save Deck** zapisuje w `var/decks/` (talia wbudowana zapisuje się jako Twoja kopia), **Import** przyjmuje
+  listę wklejoną ze stron z taliami („3x Nazwa karty”), **Export** daje listę tekstową, **Play** wraca do
+  lobby z tą talią.
 
 ## Co już działa
 - **Gra w przeglądarce przeciwko botowi** (etap 2): pełne zasady (mulligan, Gigi, Eddies, sprzedaż,

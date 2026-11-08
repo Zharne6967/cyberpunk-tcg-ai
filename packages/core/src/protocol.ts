@@ -142,6 +142,25 @@ export interface DeckSummary {
   size: number;
   colors: string[];
   legal: boolean;
+  /** Your own deck (var/decks) — can be saved over and deleted. */
+  editable?: boolean;
+}
+
+/** Deck as stored and edited (slugs; main = slug -> copies). */
+export interface DeckData {
+  id: string;
+  name: string;
+  source?: { kind: string; url?: string; author?: string; date?: string; note?: string };
+  legends: string[];
+  main: Record<string, number>;
+}
+
+export interface DeckCheck {
+  problems: { severity: "error" | "warning"; code: string; message: string }[];
+  legal: boolean;
+  size: number;
+  /** The deck as a text list (export). */
+  text: string;
 }
 
 export interface BotSummary {

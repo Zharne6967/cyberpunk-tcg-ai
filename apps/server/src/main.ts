@@ -4,7 +4,7 @@ import { extname, join, normalize } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { STRATEGIES } from "@cpai/ai";
 import type { BotSummary, ClientMessage, NewGameRequest } from "@cpai/core/protocol";
-import { getDeck, loadAllDecks, summarizeDeck } from "./decks.ts";
+import { checkDeck, deleteUserDeck, getDeck, importDeckText, isUserDeck, loadAllDecks, sanitizeDeck, saveUserDeck, summarizeDeck } from "./decks.ts";
 import { botPool } from "./bot-pool.ts";
 import { GameSession, games } from "./game.ts";
 import { getCardImage } from "./images.ts";
@@ -67,6 +67,26 @@ const server = createServer(async (req, res) => {
       return res.end(cardsJson);
     }
     if (p === "/api/decks" && req.method === "GET") return sendJson(res, 200, loadAllDecks().map(summarizeDeck).sort((a, b) => a.name.localeCompare(b.name)));
+    // ---- deck builder
+    if (p === "/api/decks/check" && req.method === "POST") {
+      const body = (await readBody(req)) as { deck?: unknown };
+      return sendJson(res, 200, checkDeck(sanitizeDeck(body.deck)));
+    }
+    if (p === "/api/decks/import" && req.method === "POST") {
+      const body = (await readBody(req)) as { text?: string; name?: string };
+      return sendJson(res, 200, importDeckText(String(body.text ?? ""), body.name));
+    }
+    if (p.startsWith("/api/decks/") && req.method === "PUT") {
+      const deck = sanitizeDeck({ ...((await readBody(req)) as object), id: decodeURIComponent(p.slice("/api/decks/".length)) });
+      // Built-in decks are read-only: saving one makes it your own copy under a new id.
+      if (getDeck(deck.id) && !isUserDeck(deck.id)) deck.id = `user-${Date.now().toString(36)}`;
+      saveUserDeck(deck);
+      return sendJson(res, 200, summarizeDeck(deck));
+    }
+    if (p.startsWith("/api/decks/") && req.method === "DELETE") {
+      const id = decodeURIComponent(p.slice("/api/decks/".length));
+      return deleteUserDeck(id) ? sendJson(res, 200, { ok: true }) : sendJson(res, 404, { error: "Only your own decks can be deleted" });
+    }
     if (p.startsWith("/api/decks/") && req.method === "GET") {
       const deck = getDeck(decodeURIComponent(p.slice("/api/decks/".length)));
       return deck ? sendJson(res, 200, deck) : sendJson(res, 404, { error: "Deck not found" });

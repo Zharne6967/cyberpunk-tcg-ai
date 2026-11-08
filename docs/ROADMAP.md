@@ -8,7 +8,7 @@ Każdy etap to osobna sesja pracy, zakończona działającą wersją i paczką Z
 | 2 | Gra w przeglądarce | serwer + stół do gry vs bot, klik w kartę → pełny opis, log ruchów, wszystkie wybory (cele, triggery, kradzież Gigów), `start.bat` dla Windows, lokalne obrazki kart | ✅ gotowe |
 | 3 | Silny, uczciwy bot | determinizacja ukrytych kart + ISMCTS w wątkach roboczych, poziomy trudności, benchmark vs obecne boty | 🔶 w toku (działa, do strojenia) |
 | 4 | Stół jak na żywo | rewersy kart, ukryte własne Legendy (zgodnie z CR), losowanie pierwszego gracza w okienku, przeciąganie kart na strefy, tryb „bez podpowiedzi” | 🔶 wersja 1 gotowa |
-| 5 | Deck builder | panel składania talii: wyszukiwarka i filtry kart, legalność na żywo, krzywa/kolory, zapis/eksport/import listy | |
+| 5 | Deck builder | panel składania talii: wyszukiwarka i filtry kart, legalność na żywo, krzywa/kolory, zapis/eksport/import listy | 🔶 wersja 1 gotowa |
 | 5b | Gra ze znajomym przez internet | kolega gra u siebie: (A) ta sama aplikacja u niego (ZIP + `instaluj.bat`) vs bot, (B) mecz człowiek–człowiek: pokoje z kodem, dwa ludzkie miejsca, każdy widzi tylko swoje karty, dostęp przez Tailscale/Cloudflare Tunnel albo mały serwer w chmurze | plan na później |
 | 6 | Uczenie się | zapis każdej partii, nocny self-play, strojenie oceny pozycji, „bramka” (nowa wersja musi pokonać starą), raport czego się nauczył, model Twojego stylu gry | |
 | 7 | Talie z sieci | importery (tcgcontender, ripperdeck, choombattler, exburst, tekst), snapshot mety, gauntlet, analiza talii w UI (krzywa, Eddies, aggro, tempo kluczowych kart) | |
@@ -53,13 +53,26 @@ Do zrobienia w etapie 4:
 - wybór celów efektów kliknięciem na stole z lepszą informacją zwrotną; Scry jako przeciąganie kart;
 - ręczny test całej partii przez gracza i poprawki z jego uwag.
 
-## Etap 5 — Deck builder (plan)
-**Wzór: deck builder na exburst.dev** (propozycja gracza). Pierwszy krok etapu: przejrzeć jego builder
-w przeglądarce (układ ekranu, filtry, sposób dodawania kart, statystyki talii, eksport) i spisać, co
-przenosimy; własny kod i wygląd w stylu naszej aplikacji, bez kopiowania ich grafik.
-Minimum niezależnie od wzoru — osobny ekran w lobby: lista wszystkich kart z obrazkami, filtry (kolor, typ, koszt, słowa kluczowe, tekst),
-3 Legendy + 40–50 kart z licznikami kopii, legalność na żywo (`checkDeckLegality`), krzywa kosztów i kolory,
-zapis do `var/decks`, wklejanie/eksport listy tekstowej (istniejący parser), kopiowanie talii jako punkt startu.
+## Etap 5 — Deck builder
+Wzory od gracza: deck builder https://cyberpunk-tcg-sim.online/deck-builder/ (układ, filtry, statystyki)
+i widok talii na exburst.dev (siatka obrazków z licznikami, nagłówek z Legendami i „Legal ✓”).
+Własny kod i wygląd, bez ich grafik; interfejs po angielsku, oficjalne nazwy.
+
+Zrobione (wersja 1, 2026-11-08) — ekran `#/builder` (przycisk **Deck Builder** w lobby):
+- pasek: zapisane talie (★ = Twoje), Load / New Deck / Copy / Delete / Import, nazwa, Save Deck, Export, Play;
+  talie wbudowane (`data/decks`) są tylko do odczytu — Save tworzy Twoją kopię w `var/decks`;
+- Library: wyszukiwarka ze składnią filtrów (`type:unit cost<=3 color:blue ram>=2 tag:netrunner kw:blocker
+  sell:yes`, słowa w cudzysłowie), przyciski Type / Color / Cost / RAM, „Match Legends RAM”, sortowanie
+  Cost / Name / Number; klik = dodaj (Legenda → obszar Legend), prawy klik = podgląd karty z rulingami;
+- talia: 3 Legendy + RAM na kolor, karty pogrupowane (Units / Gears / Programs) z licznikami i +/−,
+  statystyki (Main Deck x/40–50, Average cost, Sellable, Status), krzywa kosztów, kolory,
+  Draw Starting Hand (6 losowych kart);
+- legalność liczona na serwerze oficjalnymi regułami (CR 7.3: 3 Legendy o różnych nazwach, 40–50 kart,
+  max 3 kopie, RAM per kolor) — lista problemów pod statystykami;
+- API: `POST /api/decks/check`, `POST /api/decks/import`, `PUT /api/decks/:id`, `DELETE /api/decks/:id`.
+
+Do zrobienia: sideboard (do 7 kart), eksport jako obrazek/link, porównanie dwóch talii, tryb „kolekcja”
+(tylko posiadane karty), prawdopodobieństwa dobrania (Draw %).
 
 ## Decyzje
 - Silnik zasad: `thecardgoat/tcg-engines` (MIT) — deterministyczny, test na każdą regułę Comprehensive Rules i każdą z 152 kart. Szczegóły i lokalne łatki: `vendor/UPSTREAM.md`.

@@ -127,7 +127,7 @@ export function checkDeckLegality(deck: Deck): DeckProblem[] {
   const problems: DeckProblem[] = missing.map((slug) => ({
     severity: "error" as const,
     code: "UNKNOWN_CARD",
-    message: `Nieznana karta: ${slug}`,
+    message: `Unknown card: ${slug}`,
   }));
   for (const e of validateDeck(legends, main)) {
     problems.push({ severity: "error", code: e.code, message: e.message });
