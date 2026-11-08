@@ -71,8 +71,11 @@ Zrobione (wersja 1, 2026-11-08) — ekran `#/builder` (przycisk **Deck Builder**
   max 3 kopie, RAM per kolor) — lista problemów pod statystykami;
 - API: `POST /api/decks/check`, `POST /api/decks/import`, `PUT /api/decks/:id`, `DELETE /api/decks/:id`.
 
-Do zrobienia: sideboard (do 7 kart), eksport jako obrazek/link, porównanie dwóch talii, tryb „kolekcja”
-(tylko posiadane karty), prawdopodobieństwa dobrania (Draw %).
+- ✅ Sideboard (Tournament Rules 3.4.4: 7 kart z talii głównej, bez Legend; niepełny = ostrzeżenie, nie blokuje
+  gry), „Add to: Main Deck / Sideboard”, import i eksport sekcji Sideboard; ✅ Draw % — szansa na co najmniej
+  jedną kopię w ręce startowej (6 kart, rozkład hipergeometryczny).
+
+Do zrobienia: eksport jako obrazek/link, porównanie dwóch talii, tryb „kolekcja” (tylko posiadane karty).
 
 ## Decyzje
 - Silnik zasad: `thecardgoat/tcg-engines` (MIT) — deterministyczny, test na każdą regułę Comprehensive Rules i każdą z 152 kart. Szczegóły i lokalne łatki: `vendor/UPSTREAM.md`.
