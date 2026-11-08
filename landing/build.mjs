@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "dist");
-const url = process.env.SERVER_URL || (process.env.SERVER_HOST ? `https://${process.env.SERVER_HOST}` : "");
+// Render's `fromService … property: host` is the internal service name (no dots): add the public domain.
+const host = process.env.SERVER_HOST ?? "";
+const publicHost = host && !host.includes(".") ? `${host}.onrender.com` : host;
+const url = process.env.SERVER_URL || (publicHost ? `https://${publicHost}` : "");
 mkdirSync(out, { recursive: true });
 copyFileSync(join(here, "index.html"), join(out, "index.html"));
 writeFileSync(join(out, "config.js"), `window.CPAI_SERVER = ${JSON.stringify(url)};\n`);

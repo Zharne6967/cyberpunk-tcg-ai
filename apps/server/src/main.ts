@@ -67,6 +67,12 @@ class UserError extends Error {}
  * is wiped whenever it sleeps), sent along when a game starts.
  */
 const CLOUD = process.env.CPAI_CLOUD === "1";
+/** Public address of the always-on start page (Render gives the internal service name: add the domain). */
+const LANDING_URL = (() => {
+  if (process.env.PUBLIC_LANDING_URL) return process.env.PUBLIC_LANDING_URL;
+  const h = process.env.PUBLIC_LANDING_HOST;
+  return h ? `https://${h.includes(".") ? h : `${h}.onrender.com`}` : null;
+})();
 
 /** Room-code lookups per address and minute (codes must not be guessable by brute force). */
 const codeTries = new Map<string, { n: number; t: number }>();
@@ -126,7 +132,7 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store", "access-control-allow-origin": "*" });
       return res.end(JSON.stringify({ ok: true }));
     }
-    if (p === "/api/config") return sendJson(res, 200, { cloud: CLOUD, landingUrl: process.env.PUBLIC_LANDING_URL || (process.env.PUBLIC_LANDING_HOST ? `https://${process.env.PUBLIC_LANDING_HOST}` : null) });
+    if (p === "/api/config") return sendJson(res, 200, { cloud: CLOUD, landingUrl: LANDING_URL });
     if (CLOUD && p.startsWith("/api/share")) return sendJson(res, 404, { error: "Not available online" });
     // ---- sharing over the internet (only from this computer)
     // Everyone who got this far is authorized (has the key or is on this computer).
