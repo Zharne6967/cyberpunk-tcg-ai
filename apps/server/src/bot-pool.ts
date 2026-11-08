@@ -47,7 +47,8 @@ class PoolWorker {
 export class BotPool {
   private workers: PoolWorker[] = [];
   private next = 0;
-  readonly size = Math.max(1, Math.min(6, cpus().length - 2));
+  // BOT_THREADS caps the pool on small cloud machines (each thread loads the card catalog).
+  readonly size = Math.max(1, Math.min(6, Number(process.env.BOT_THREADS) || cpus().length - 2));
 
   private ensure() {
     while (this.workers.length < this.size) this.workers.push(new PoolWorker());

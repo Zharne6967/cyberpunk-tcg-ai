@@ -117,6 +117,10 @@ async function playOne(i: number) {
     // Host opens a room, the friend joins through the invite (the friend's deck is pasted as text).
     const host = await post<SeatTicket>("/api/rooms", { deckId: yourDeck, name: "Host" });
     const otherList = (await post<{ text: string }>("/api/decks/check", { deck: await (await fetch(`${base}/api/decks/${otherDeck}`)).json() })).text;
+    // The friend can also find the room by its 6-digit code.
+    if (!/^\d{6}$/.test(host.invite ?? "")) throw new Error(`room code is not 6 digits: ${host.invite}`);
+    const found = (await (await fetch(`${base}/api/rooms/code/${host.invite}`)).json()) as { gameId?: string };
+    if (found.gameId !== host.gameId) throw new Error("room code lookup failed");
     const info = (await (await fetch(`${base}/api/rooms/${host.gameId}?invite=${host.invite}`)).json()) as { status: string };
     if (info.status !== "waiting") throw new Error(`room status ${info.status}`);
     const hostRun = playSeat(host.gameId, host.token, "host");

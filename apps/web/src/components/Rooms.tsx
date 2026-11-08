@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import type { DeckSummary, RoomInfo, ShareInfo } from "@cpai/core/protocol";
-import { api, loadCardDb, playerName, setPlayerName, type CardDb } from "../api.ts";
+import { api, loadCardDb, playerName, setPlayerName, type CardDb, type ServerConfig } from "../api.ts";
 import { DeckPicker } from "./Lobby.tsx";
 
 const isLocalHost = () => ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
 
-/** The link a friend opens: public tunnel address while sharing, this address otherwise. Carries the access key. */
-export function inviteLink(share: ShareInfo | null, gameId: string, invite: string): string {
+/**
+ * The link a friend opens. Online: the always-on start page (it wakes the server). At home: the public
+ * tunnel address while sharing, this address otherwise, with the access key.
+ */
+export function inviteLink(share: ShareInfo | null, gameId: string, invite: string, cfg?: ServerConfig | null): string {
+  if (cfg?.cloud) return `${cfg.landingUrl ?? location.origin}/#/join/${gameId}/${invite}`;
   const base = share?.active && share.url ? share.url : location.origin;
   const key = share?.key ? `/?key=${encodeURIComponent(share.key)}` : "/";
   return `${base}${key}#/join/${gameId}/${invite}`;
@@ -17,12 +21,16 @@ export function WaitingRoom({ gameId, invite, hostDeck }: { gameId: string; invi
   const [share, setShare] = useState<ShareInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [cfg, setCfg] = useState<ServerConfig | null>(null);
   useEffect(() => {
-    api.share().then(setShare).catch(() => {});
+    api.config().then((c) => {
+      setCfg(c);
+      if (!c.cloud) api.share().then(setShare).catch(() => {});
+    });
   }, []);
   if (!invite) return <div className="center-msg">Waiting for the other player…</div>;
-  const link = inviteLink(share, gameId, invite);
-  const localOnly = isLocalHost() && !share?.active;
+  const link = inviteLink(share, gameId, invite, cfg);
+  const localOnly = !cfg?.cloud && isLocalHost() && !share?.active;
   return (
     <div className="room">
       <h1>
@@ -31,6 +39,11 @@ export function WaitingRoom({ gameId, invite, hostDeck }: { gameId: string; invi
       <section className="panel room-card">
         <h2>Waiting for your friend</h2>
         <p className="muted small">Your deck: {hostDeck}</p>
+        {/^\d{6}$/.test(invite) && (
+          <div className="room-code" title="Room code">
+            {invite}
+          </div>
+        )}
         <div className="invite">
           <input readOnly value={link} onFocus={(e) => e.currentTarget.select()} />
           <button
@@ -45,7 +58,7 @@ export function WaitingRoom({ gameId, invite, hostDeck }: { gameId: string; invi
             {copied ? "Copied" : "Copy link"}
           </button>
         </div>
-        {isLocalHost() && (
+        {!cfg?.cloud && isLocalHost() && (
           <div className="share-box">
             {share?.active ? (
               <p className="small">

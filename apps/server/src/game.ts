@@ -69,7 +69,7 @@ export class GameSession {
   readonly seed: string;
   readonly mode: "bot" | "friend";
   readonly seats: Record<SeatId, SeatInfo>;
-  /** Friend rooms: code in the invite link, valid until the second player joins. */
+  /** Friend rooms: 6-digit room code (also the invite in links), valid until the second player joins. */
   readonly invite: string | null;
   private engine: LocalEngine | null = null;
   private listeners = new Map<Listener, SeatId>();
@@ -111,7 +111,7 @@ export class GameSession {
   static friendRoom(hostDeck: Deck, hostName: string): GameSession {
     return new GameSession({
       mode: "friend",
-      invite: secret().slice(0, 10),
+      invite: newRoomCode(),
       seats: {
         p1: { kind: "human", name: hostName, token: secret(), deck: hostDeck },
         p2: { kind: "human", name: "", token: secret(), deck: null },
@@ -130,7 +130,7 @@ export class GameSession {
 
   /** The invited friend takes p2 with their deck; the game starts. Returns p2's token. */
   join(invite: string, deck: Deck, name: string): string {
-    if (this.mode !== "friend" || !this.invite || invite !== this.invite) throw new Error("This invite link is not valid.");
+    if (this.mode !== "friend" || !this.invite || invite !== this.invite) throw new Error("This room code is not valid.");
     if (this.started) throw new Error("This game has already started.");
     this.seats.p2.deck = deck;
     this.seats.p2.name = name.trim().slice(0, 24) || "Player 2";
@@ -513,6 +513,19 @@ export class GameSession {
 }
 
 export const games = new Map<string, GameSession>();
+
+/** A 6-digit code no open room uses. */
+function newRoomCode(): string {
+  for (;;) {
+    const code = String(100000 + (randomBytes(4).readUInt32BE(0) % 900000));
+    if (![...games.values()].some((g) => g.invite === code && !g.started)) return code;
+  }
+}
+
+/** The open (not started) friend room with this code. */
+export function roomByCode(code: string): GameSession | undefined {
+  return [...games.values()].find((g) => g.mode === "friend" && !g.started && g.invite === code);
+}
 
 /** Drop games nobody touched for 6 hours. */
 setInterval(() => {

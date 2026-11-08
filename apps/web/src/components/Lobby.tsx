@@ -108,6 +108,17 @@ export function Lobby() {
   const [error, setError] = useState<string>();
   const [mode, setMode] = useState<"bot" | "friend">("bot");
   const [name, setName] = useState(playerName());
+  const [code, setCode] = useState("");
+
+  async function joinByCode() {
+    setError(undefined);
+    try {
+      const room = await api.roomByCode(code.trim());
+      location.hash = `#/join/${room.gameId}/${room.invite}`;
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    }
+  }
 
   async function createRoom() {
     setBusy(true);
@@ -210,9 +221,26 @@ export function Lobby() {
             </button>
           </>
         ) : (
-          <button className="btn primary big" disabled={busy || !decks.length} onClick={createRoom}>
-            {busy ? "Creating…" : "Create room"}
-          </button>
+          <>
+            <button className="btn primary big" disabled={busy || !decks.length} onClick={createRoom}>
+              {busy ? "Creating…" : "Create room"}
+            </button>
+            <div className="lobby-row">
+              <label>Room code</label>
+              <input
+                className="search code-input"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="000000"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                onKeyDown={(e) => e.key === "Enter" && code.length === 6 && joinByCode()}
+              />
+              <button className="btn" disabled={code.length !== 6} onClick={joinByCode}>
+                Join
+              </button>
+            </div>
+          </>
         )}
       </section>
     </div>

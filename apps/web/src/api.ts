@@ -48,23 +48,87 @@ export function loadCardDb(): Promise<CardDb> {
 
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-export const api = {
+type DeckRef = { deckId?: string; deck?: DeckData; deckText?: string };
+
+const rawApi = {
   decks: () => getJson<DeckSummary[]>("/api/decks"),
   deck: (id: string) => getJson<DeckData>(`/api/decks/${encodeURIComponent(id)}`),
-  checkDeck: (deck: DeckData) => getJson<DeckCheck>("/api/decks/check", json("POST", { deck })),
   saveDeck: (deck: DeckData) => getJson<DeckSummary>(`/api/decks/${encodeURIComponent(deck.id)}`, json("PUT", deck)),
   deleteDeck: (id: string) => getJson<{ ok: boolean }>(`/api/decks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+};
+
+export const api = {
+  config: () => (configPromise ??= getJson<ServerConfig>("/api/config").catch(() => ({ cloud: false, landingUrl: null }))),
+  /** Built-in decks + your decks (on this server locally, in this browser online). */
+  decks: async (): Promise<DeckSummary[]> => {
+    const [server, cfg] = await Promise.all([rawApi.decks(), api.config()]);
+    return cfg.cloud ? [...server, ...browserDecks().map((d) => d.summary)] : server;
+  },
+  deck: async (id: string): Promise<DeckData> => browserDecks().find((d) => d.deck.id === id)?.deck ?? rawApi.deck(id),
+  checkDeck: (deck: DeckData) => getJson<DeckCheck>("/api/decks/check", json("POST", { deck })),
+  /** Save: online into this browser, locally on the server (built-in decks become your copy). */
+  saveDeck: async (deck: DeckData): Promise<DeckSummary> => {
+    if (!(await api.config()).cloud) return rawApi.saveDeck(deck);
+    const check = await api.checkDeck(deck);
+    const id = deck.id.startsWith("user-") ? deck.id : `user-${Date.now().toString(36)}`;
+    const saved = { ...deck, id };
+    const summary: DeckSummary = { id, name: deck.name, legends: deck.legends, size: check.size, colors: [], legal: check.legal, editable: true, source: { kind: "user" } };
+    const db = await loadCardDb();
+    summary.colors = [...new Set(deck.legends.map((s) => db.bySlug.get(s)?.color).filter((c): c is CardData["color"] => !!c))];
+    writeBrowserDecks([...browserDecks().filter((d) => d.deck.id !== id), { deck: saved, summary }]);
+    return summary;
+  },
+  deleteDeck: async (id: string) => {
+    if (!(await api.config()).cloud) return rawApi.deleteDeck(id);
+    writeBrowserDecks(browserDecks().filter((d) => d.deck.id !== id));
+    return { ok: true };
+  },
   importDeck: (text: string, name?: string) => getJson<{ deck: DeckData; unresolved: { line: string; name: string }[] }>("/api/decks/import", json("POST", { text, name })),
   bots: () => getJson<BotSummary[]>("/api/bots"),
-  newGame: (req: NewGameRequest) => getJson<SeatTicket>("/api/games", json("POST", req)).then(rememberSeat),
+  newGame: async (req: NewGameRequest) => {
+    const you = await deckRef(req.yourDeck);
+    const bot = await deckRef(req.botDeck);
+    return getJson<SeatTicket>("/api/games", json("POST", { ...req, ...(you.deck ? { yourDeckData: you.deck } : {}), ...(bot.deck ? { botDeckData: bot.deck } : {}) })).then(rememberSeat);
+  },
   gameExists: (id: string) => getJson<{ gameId: string; mode: string; started: boolean }>(`/api/games/${id}`),
-  createRoom: (req: { deckId?: string; deckText?: string; name?: string }) => getJson<SeatTicket>("/api/rooms", json("POST", req)).then(rememberSeat),
+  createRoom: async (req: { deckId: string; name?: string }) => getJson<SeatTicket>("/api/rooms", json("POST", { name: req.name, ...(await deckRef(req.deckId)) })).then(rememberSeat),
+  roomByCode: (code: string) => getJson<{ gameId: string; invite: string }>(`/api/rooms/code/${encodeURIComponent(code)}`),
   roomInfo: (id: string, invite: string) => getJson<RoomInfo>(`/api/rooms/${id}?invite=${encodeURIComponent(invite)}`),
-  joinRoom: (id: string, req: { invite: string; deckId?: string; deckText?: string; name?: string }) => getJson<SeatTicket>(`/api/rooms/${id}/join`, json("POST", req)).then(rememberSeat),
+  joinRoom: async (id: string, req: { invite: string; deckId?: string; deckText?: string; name?: string }) =>
+    getJson<SeatTicket>(`/api/rooms/${id}/join`, json("POST", { invite: req.invite, name: req.name, ...(req.deckText ? { deckText: req.deckText } : await deckRef(req.deckId ?? "")) })).then(rememberSeat),
   share: () => getJson<ShareInfo>("/api/share"),
   startShare: () => getJson<ShareInfo>("/api/share/start", { method: "POST" }),
   stopShare: () => getJson<ShareInfo>("/api/share/stop", { method: "POST" }),
 };
+
+// ---- server configuration and decks kept in this browser (online mode)
+export interface ServerConfig {
+  cloud: boolean;
+  /** Always-on start page that wakes the sleeping server (invite links point there). */
+  landingUrl: string | null;
+}
+let configPromise: Promise<ServerConfig> | undefined;
+
+const DECKS_KEY = "cpai.decks.v1";
+function browserDecks(): { deck: DeckData; summary: DeckSummary }[] {
+  try {
+    return JSON.parse(localStorage.getItem(DECKS_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+function writeBrowserDecks(list: { deck: DeckData; summary: DeckSummary }[]) {
+  try {
+    localStorage.setItem(DECKS_KEY, JSON.stringify(list));
+  } catch {
+    /* storage full or disabled */
+  }
+}
+/** How to send a deck to the server: by id (server decks) or as data (decks saved in this browser). */
+async function deckRef(id: string): Promise<DeckRef> {
+  const local = browserDecks().find((d) => d.deck.id === id);
+  return local ? { deck: local.deck } : { deckId: id };
+}
 
 // ---- your seat in a game: the secret token is what lets this browser play that seat
 const seatKey = (gameId: string) => `cpai.seat.${gameId}`;

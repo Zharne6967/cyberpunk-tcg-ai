@@ -460,3 +460,7 @@ a { color: var(--cyan); }
   .builder-bar { gap: 4px; }
   .deck-name-input { width: 140px; }
 }
+
+/* room code */
+.room-code { font: 800 44px/1 ui-monospace, Consolas, monospace; letter-spacing: .3em; color: var(--yellow); text-align: center; padding: 10px 0; border: 1px solid var(--mat-line); background: #0a0a00; }
+.code-input { font: 700 18px ui-monospace, Consolas, monospace; letter-spacing: .3em; }

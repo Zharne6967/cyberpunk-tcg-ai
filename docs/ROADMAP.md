@@ -53,6 +53,13 @@ Do zrobienia w etapie 4:
 - wybór celów efektów kliknięciem na stole z lepszą informacją zwrotną; Scry jako przeciąganie kart;
 - ręczny test całej partii przez gracza i poprawki z jego uwag.
 
+## Wdrożenie online — stan (2026-11-09)
+✅ Gotowe po naszej stronie: kody pokoi 6-cyfrowe + „Room code / Join” w lobby, tryb online `CPAI_CLOUD=1`
+(strona otwarta, talie w przeglądarce, limit zgadywania kodów, CORS dla /api/health), strona startowa z ekranem
+ładowania (`landing/`), `render.yaml` (Static Site zawsze włączony + Free web service usypiany), instrukcja
+[`docs/DEPLOY.md`](DEPLOY.md). Testy: `CPAI_CLOUD=1 pnpm selftest 2 friend` ✓, API trybu online ✓.
+Czeka na gracza: prywatne repo na GitHubie + konto Render (Blueprint → Apply).
+
 ## Prośby gracza (2026-11-08) — do rozplanowania na początku następnej sesji
 - **Strona dostępna zawsze, dla każdego** (hosting w chmurze, np. Fly.io / Render / mały VPS, serwer działa 24/7 bez
   Twojego komputera) + **dołączanie 6-cyfrowym kodem pokoju** (zamiast długiego linku); do przemyślenia: konta/

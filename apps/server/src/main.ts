@@ -7,7 +7,7 @@ import { checkDeckLegality, isDeckLegal, type Deck } from "@cpai/core";
 import type { BotSummary, ClientMessage, NewGameRequest, RoomInfo, SeatTicket } from "@cpai/core/protocol";
 import { checkDeck, deleteUserDeck, getDeck, importDeckText, isUserDeck, loadAllDecks, sanitizeDeck, saveUserDeck, summarizeDeck } from "./decks.ts";
 import { botPool } from "./bot-pool.ts";
-import { GameSession, games } from "./game.ts";
+import { GameSession, games, roomByCode } from "./game.ts";
 import { getCardImage } from "./images.ts";
 import { isAuthorized, isRemote, keyLogin, shareStatus, startShare, stopShare } from "./share.ts";
 import { DATA_DIR, WEB_DIST } from "./paths.ts";
@@ -61,8 +61,36 @@ let cardsJson: string | undefined;
 /** An error caused by the request (shown to the player), not by the server. */
 class UserError extends Error {}
 
-/** A deck chosen by id, or pasted as a text list (friends can bring their own list). */
-function playerDeck(body: { deckId?: string; deckText?: string; deckName?: string }): Deck {
+/**
+ * Cloud mode (CPAI_CLOUD=1, the free always-reachable deployment): the site is open to everyone,
+ * friends meet by 6-digit room code, and your own decks live in your browser (a free server's disk
+ * is wiped whenever it sleeps), sent along when a game starts.
+ */
+const CLOUD = process.env.CPAI_CLOUD === "1";
+
+/** Room-code lookups per address and minute (codes must not be guessable by brute force). */
+const codeTries = new Map<string, { n: number; t: number }>();
+function tooManyCodeTries(req: IncomingMessage): boolean {
+  const ip = String(req.headers["cf-connecting-ip"] ?? req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0]!.trim();
+  const now = Date.now();
+  const e = codeTries.get(ip);
+  if (!e || now - e.t > 60_000) {
+    codeTries.set(ip, { n: 1, t: now });
+    return false;
+  }
+  return ++e.n > 20;
+}
+
+/** A deck sent as data (decks saved in the browser): normalised and checked like any other. */
+function deckFromData(data: unknown): Deck {
+  const deck = sanitizeDeck({ ...(data as object), id: "user-" + String((data as { id?: string })?.id ?? "deck").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60) });
+  if (!isDeckLegal(deck)) throw new UserError(`The deck is not legal: ${checkDeckLegality(deck).filter((p) => p.severity === "error").map((p) => p.message).join("; ")}`);
+  return deck;
+}
+
+/** A deck chosen by id, sent as data, or pasted as a text list (friends can bring their own list). */
+function playerDeck(body: { deckId?: string; deck?: unknown; deckText?: string; deckName?: string }): Deck {
+  if (body.deck) return deckFromData(body.deck);
   if (body.deckText && body.deckText.trim()) {
     const { deck, unresolved } = importDeckText(body.deckText, body.deckName);
     if (unresolved.length) throw new UserError(`Unknown cards: ${unresolved.map((u) => u.name).join(", ")}`);
@@ -82,7 +110,7 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://x");
     const p = url.pathname;
     // ---- access from other devices / the internet needs the key (shared links carry it once)
-    if (!isAuthorized(req)) {
+    if (!CLOUD && !isAuthorized(req)) {
       const login = keyLogin(req, url);
       if (login) {
         res.writeHead(302, { "set-cookie": login.cookie, location: login.location || "/", "cache-control": "no-store" });
@@ -93,7 +121,13 @@ const server = createServer(async (req, res) => {
       return res.end("<!doctype html><meta name=viewport content='width=device-width'><body style='background:#000;color:#f5e600;font:16px sans-serif;padding:24px'>Cyberpunk TCG AI: open the full link you received (it contains the access key).</body>");
     }
     const local = !isRemote(req);
-    if (p === "/api/health") return sendJson(res, 200, { ok: true });
+    if (p === "/api/health") {
+      // The always-on start page polls this while the sleeping server boots (another origin).
+      res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store", "access-control-allow-origin": "*" });
+      return res.end(JSON.stringify({ ok: true }));
+    }
+    if (p === "/api/config") return sendJson(res, 200, { cloud: CLOUD, landingUrl: process.env.PUBLIC_LANDING_URL || (process.env.PUBLIC_LANDING_HOST ? `https://${process.env.PUBLIC_LANDING_HOST}` : null) });
+    if (CLOUD && p.startsWith("/api/share")) return sendJson(res, 404, { error: "Not available online" });
     // ---- sharing over the internet (only from this computer)
     // Everyone who got this far is authorized (has the key or is on this computer).
     if (p === "/api/share" && req.method === "GET") return sendJson(res, 200, shareStatus());
@@ -114,8 +148,8 @@ const server = createServer(async (req, res) => {
       const body = (await readBody(req)) as { text?: string; name?: string };
       return sendJson(res, 200, importDeckText(String(body.text ?? ""), body.name));
     }
-    if (p.startsWith("/api/decks/") && (req.method === "PUT" || req.method === "DELETE") && !local) {
-      return sendJson(res, 403, { error: "Decks can only be saved or deleted on the host computer" });
+    if (p.startsWith("/api/decks/") && (req.method === "PUT" || req.method === "DELETE") && (CLOUD || !local)) {
+      return sendJson(res, 403, { error: CLOUD ? "Decks are saved in your browser" : "Decks can only be saved or deleted on the host computer" });
     }
     if (p.startsWith("/api/decks/") && req.method === "PUT") {
       const deck = sanitizeDeck({ ...((await readBody(req)) as object), id: decodeURIComponent(p.slice("/api/decks/".length)) });
@@ -139,9 +173,9 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, bots);
     }
     if (p === "/api/games" && req.method === "POST") {
-      const body = (await readBody(req)) as NewGameRequest;
-      const you = getDeck(body.yourDeck);
-      const bot = getDeck(body.botDeck);
+      const body = (await readBody(req)) as NewGameRequest & { yourDeckData?: unknown; botDeckData?: unknown };
+      const you = body.yourDeckData ? deckFromData(body.yourDeckData) : getDeck(body.yourDeck);
+      const bot = body.botDeckData ? deckFromData(body.botDeckData) : getDeck(body.botDeck);
       if (!you || !bot) return sendJson(res, 400, { error: "Choose both decks" });
       const game = GameSession.vsBot(you, bot, body.bot ?? "tactical", body.seed, body.name?.trim() || "You");
       games.set(game.id, game);
@@ -153,10 +187,16 @@ const server = createServer(async (req, res) => {
     }
     // ---- friend rooms
     if (p === "/api/rooms" && req.method === "POST") {
-      const body = (await readBody(req)) as { deckId?: string; deckText?: string; name?: string };
+      const body = (await readBody(req)) as { deckId?: string; deck?: unknown; deckText?: string; name?: string };
       const game = GameSession.friendRoom(playerDeck(body), body.name?.trim() || "Player 1");
       games.set(game.id, game);
       return sendJson(res, 200, ticket(game, "p1", true));
+    }
+    const byCode = /^\/api\/rooms\/code\/(\d{6})$/.exec(p);
+    if (byCode && req.method === "GET") {
+      if (tooManyCodeTries(req)) return sendJson(res, 429, { error: "Too many attempts, wait a minute." });
+      const g = roomByCode(byCode[1]!);
+      return g ? sendJson(res, 200, { gameId: g.id, invite: g.invite }) : sendJson(res, 404, { error: "No open room with this code." });
     }
     const room = /^\/api\/rooms\/([\w-]+)(\/join)?$/.exec(p);
     if (room) {
@@ -169,7 +209,7 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 200, info);
       }
       if (room[2] && req.method === "POST") {
-        const body = (await readBody(req)) as { invite?: string; deckId?: string; deckText?: string; name?: string };
+        const body = (await readBody(req)) as { invite?: string; deckId?: string; deck?: unknown; deckText?: string; name?: string };
         let token: string;
         try {
           token = g.join(String(body.invite ?? ""), playerDeck(body), String(body.name ?? ""));
@@ -202,7 +242,7 @@ const server = createServer(async (req, res) => {
 const wss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "/", "http://x");
-  if (url.pathname !== "/ws" || !isAuthorized(req)) return socket.destroy();
+  if (url.pathname !== "/ws" || (!CLOUD && !isAuthorized(req))) return socket.destroy();
   const game = games.get(url.searchParams.get("game") ?? "");
   // Only the players of this game: the token decides which seat (and so which cards) you see.
   const seat = game?.seatForToken(url.searchParams.get("token"));

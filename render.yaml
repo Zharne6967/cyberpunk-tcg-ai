@@ -1,0 +1,38 @@
+# Render Blueprint: free deployment from a (private) GitHub repository.
+#  - cyberpunk-tcg-ai         static start page, always on; shows a loading screen and wakes the server
+#  - cyberpunk-tcg-ai-server  the game server (Node); free plan, sleeps after ~15 min without players
+# Render dashboard → New → Blueprint → pick this repository → Apply.
+services:
+  - type: web
+    name: cyberpunk-tcg-ai-server
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm@10.28.0 && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22.18.0"
+      - key: CPAI_CLOUD
+        value: "1"
+      - key: HOST
+        value: 0.0.0.0
+      - key: BOT_THREADS
+        value: "1"
+      - key: PUBLIC_LANDING_HOST
+        fromService:
+          type: web
+          name: cyberpunk-tcg-ai
+          property: host
+
+  - type: web
+    name: cyberpunk-tcg-ai
+    runtime: static
+    buildCommand: node landing/build.mjs
+    staticPublishPath: landing/dist
+    envVars:
+      - key: SERVER_HOST
+        fromService:
+          type: web
+          name: cyberpunk-tcg-ai-server
+          property: host
