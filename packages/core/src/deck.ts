@@ -12,6 +12,8 @@ export interface Deck {
   legends: string[];
   /** slug -> copies */
   main: Record<string, number>;
+  /** Tournament sideboard (Tournament Rules 3.4.4: 7 main-deck cards, no Legends). Not used in games. */
+  sideboard?: Record<string, number>;
 }
 
 export interface DeckProblem {
@@ -24,6 +26,7 @@ export interface ParsedDeckText {
   name?: string;
   legends: string[];
   main: Record<string, number>;
+  sideboard: Record<string, number>;
   unresolved: { line: string; name: string }[];
 }
 
@@ -41,7 +44,7 @@ const SECTION = /^\s*(legends?|main\s*deck|main|deck|sideboard|side\s*deck)\s*(\
  */
 export function parseDeckText(text: string): ParsedDeckText {
   const catalog = getCatalog();
-  const out: ParsedDeckText = { legends: [], main: {}, unresolved: [] };
+  const out: ParsedDeckText = { legends: [], main: {}, sideboard: {}, unresolved: [] };
   let section: "legends" | "main" | "side" | undefined;
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.replace(/^[-*•]\s*/, "").trim();
@@ -69,13 +72,14 @@ export function parseDeckText(text: string): ParsedDeckText {
       out.unresolved.push({ line: rawLine, name: line });
       continue;
     }
-    if (section === "side") continue;
     const card = catalog.byName(name!);
     if (!card) {
       out.unresolved.push({ line: rawLine, name: name! });
       continue;
     }
-    if (card.type === "legend" && section !== "main") {
+    if (section === "side") {
+      out.sideboard[card.slug] = (out.sideboard[card.slug] ?? 0) + count!;
+    } else if (card.type === "legend" && section !== "main") {
       for (let i = 0; i < count!; i++) out.legends.push(card.slug);
     } else {
       out.main[card.slug] = (out.main[card.slug] ?? 0) + count!;
@@ -92,6 +96,7 @@ export function deckFromText(text: string, meta: Pick<Deck, "id"> & Partial<Deck
     source: meta.source,
     legends: parsed.legends,
     main: parsed.main,
+    ...(Object.keys(parsed.sideboard).length ? { sideboard: parsed.sideboard } : {}),
     unresolved: parsed.unresolved,
   };
 }
@@ -132,7 +137,22 @@ export function checkDeckLegality(deck: Deck): DeckProblem[] {
   for (const e of validateDeck(legends, main)) {
     problems.push({ severity: "error", code: e.code, message: e.message });
   }
+  // Tournament Rules 3.4.4: a sideboard holds 7 main-deck cards and no Legends.
+  const side = Object.entries(deck.sideboard ?? {});
+  const sideCount = side.reduce((s, [, n]) => s + n, 0);
+  if (sideCount > 7) problems.push({ severity: "error", code: "SIDEBOARD_SIZE", message: `Sideboard must have 7 cards, got ${sideCount}` });
+  else if (sideCount > 0 && sideCount < 7) problems.push({ severity: "warning", code: "SIDEBOARD_SIZE", message: `Sideboard must have 7 cards, got ${sideCount}` });
+  const catalog = getCatalog();
+  for (const [slug] of side) {
+    const c = catalog.bySlug(slug);
+    if (c?.type === "legend") problems.push({ severity: "error", code: "SIDEBOARD_LEGEND", message: `Legend "${c.displayName}" cannot be in the sideboard` });
+  }
   return problems;
+}
+
+/** Legal for play: no errors (warnings such as an incomplete sideboard do not block games). */
+export function isDeckLegal(deck: Deck): boolean {
+  return checkDeckLegality(deck).every((p) => p.severity !== "error");
 }
 
 export function toEngineDeckList(deck: Deck, playerId: string, playerName = playerId): DeckList {
@@ -146,5 +166,10 @@ export function deckToText(deck: Deck): string {
   for (const slug of deck.legends) lines.push(`1 ${name(slug)}`);
   lines.push("", `Main Deck (${deckSize(deck)})`);
   for (const [slug, n] of Object.entries(deck.main)) lines.push(`${n} ${name(slug)}`);
+  const side = Object.entries(deck.sideboard ?? {});
+  if (side.length) {
+    lines.push("", `Sideboard (${side.reduce((s, [, n]) => s + n, 0)})`);
+    for (const [slug, n] of side) lines.push(`${n} ${name(slug)}`);
+  }
   return lines.join("\n");
 }

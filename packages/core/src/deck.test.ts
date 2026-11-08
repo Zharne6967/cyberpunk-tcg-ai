@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkDeckLegality, deckFromText, deckSize, deckToText, getCatalog, normalizeCardName, parseDeckText } from "./index.ts";
+import { checkDeckLegality, deckFromText, deckSize, deckToText, getCatalog, isDeckLegal, normalizeCardName, parseDeckText } from "./index.ts";
 
 // Real tournament list as published on tcgcontender.com (Top 16, Standard).
 const TCGCONTENDER = `
@@ -59,5 +59,45 @@ describe("deck text parsing", () => {
   it("reports cards it cannot resolve instead of dropping them silently", () => {
     const parsed = parseDeckText("Legends\n1 Nobody Special\nMain Deck\n3 Mantis Blades");
     expect(parsed.unresolved.map((u) => u.name)).toEqual(["Nobody Special"]);
+  });
+});
+
+describe("sideboard (Tournament Rules 3.4.4)", () => {
+  const base = `Legends
+1 Dexter DeShawn: Off the Grid
+1 Dum Dum: Maelstrom Triggerman
+1 River Ward: Detective on the Hunt
+Main Deck
+3x 6th Street Recruits
+3x Adrenaline Converter
+3x Gorilla Arms
+3x Johnny Silverhand: Never Stop Fighting
+3x Kiroshi Optics
+3x Mandibular Upgrade
+3x Mantis Blades
+3x Safety Override
+3x Satori: Sword of Saburo
+3x Secondhand Bombus
+3x Sketchy Ripper
+3x Viktor Vektor: You Might Feel a Little Pinch
+3x Zetatech Faceplate
+2x Arasaka Emergency Radioport
+`;
+  it("parses, exports and checks a sideboard", () => {
+    const deck = deckFromText(`${base}Sideboard\n3x Floor It\n2x Les Elemens\n`, { id: "sb" });
+    expect(deck.unresolved).toEqual([]);
+    expect(Object.values(deck.sideboard ?? {}).reduce((a, b) => a + b, 0)).toBe(5);
+    expect(deckToText(deck)).toContain("Sideboard (5)");
+    // 5 cards: allowed for play, but a tournament sideboard needs 7 (warning only).
+    expect(checkDeckLegality(deck).map((p) => [p.code, p.severity])).toContainEqual(["SIDEBOARD_SIZE", "warning"]);
+    const main = checkDeckLegality(deck).filter((p) => p.severity === "error");
+    expect(isDeckLegal(deck)).toBe(main.length === 0);
+  });
+  it("rejects Legends and more than 7 cards", () => {
+    const deck = deckFromText(`${base}Sideboard\n3x Floor It\n3x Les Elemens\n2x Gorilla Arms\n`, { id: "sb2" });
+    deck.sideboard = { ...deck.sideboard, [getCatalog().byName("Goro Takemura: Hands Unclean")!.slug]: 1 };
+    const codes = checkDeckLegality(deck).filter((p) => p.severity === "error").map((p) => p.code);
+    expect(codes).toContain("SIDEBOARD_SIZE");
+    expect(codes).toContain("SIDEBOARD_LEGEND");
   });
 });

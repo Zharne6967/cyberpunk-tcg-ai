@@ -155,6 +155,8 @@ export interface DeckData {
   source?: { kind: string; url?: string; author?: string; date?: string; note?: string };
   legends: string[];
   main: Record<string, number>;
+  /** Tournament sideboard: 7 main-deck cards, no Legends. */
+  sideboard?: Record<string, number>;
 }
 
 export interface DeckCheck {

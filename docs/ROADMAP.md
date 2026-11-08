@@ -6,7 +6,7 @@ Każdy etap to osobna sesja pracy, zakończona działającą wersją i paczką Z
 |---|------|-------------|--------|
 | 1 | Fundament | silnik zasad (vendor), baza kart `data/cards.json`, zasady `data/rules`, talie `data/decks`, parser list talii, symulator `pnpm sim` | ✅ gotowe |
 | 2 | Gra w przeglądarce | serwer + stół do gry vs bot, klik w kartę → pełny opis, log ruchów, wszystkie wybory (cele, triggery, kradzież Gigów), `start.bat` dla Windows, lokalne obrazki kart | ✅ gotowe |
-| 3 | Silny, uczciwy bot | determinizacja ukrytych kart + ISMCTS w wątkach roboczych, poziomy trudności, benchmark vs obecne boty | 🔶 w toku (działa, do strojenia) |
+| 3 | Silny, uczciwy bot | determinizacja ukrytych kart + ISMCTS w wątkach roboczych, poziomy trudności, benchmark vs obecne boty | 🔶 działa (Very Hard bije Hard 81%), strojenie trwa |
 | 4 | Stół jak na żywo | rewersy kart, ukryte własne Legendy (zgodnie z CR), losowanie pierwszego gracza w okienku, przeciąganie kart na strefy, tryb „bez podpowiedzi” | 🔶 wersja 1 gotowa |
 | 5 | Deck builder | panel składania talii: wyszukiwarka i filtry kart, legalność na żywo, krzywa/kolory, zapis/eksport/import listy | 🔶 wersja 1 gotowa |
 | 5b | Gra ze znajomym przez internet | kolega gra u siebie: (A) ta sama aplikacja u niego (ZIP + `instaluj.bat`) vs bot, (B) mecz człowiek–człowiek: pokoje z kodem, dwa ludzkie miejsca, każdy widzi tylko swoje karty, dostęp przez Tailscale/Cloudflare Tunnel albo mały serwer w chmurze | plan na później |
@@ -85,38 +85,34 @@ Pomiar (12 gier, talia The Heist w lustrze, `pnpm sim`): `tactical` vs `greedy` 
 
 Boty z silnika upstream: `greedy` (łatwy), `tactical` (minimax głębokość 3), `masterful`; `expert-oracle`, `monte-carlo`, `mcts` **podglądają ukryte karty** — nie nadają się jako uczciwy przeciwnik. Etap 3 dodaje własnego, uczciwego i silniejszego bota.
 
-## Etap 3 — stan (2026-11-08, sesja 1)
+## Etap 3 — stan
 Zrobione:
 - `packages/ai/src/ismcts/` — **SO-ISMCTS** (jedno drzewo z perspektywy bota, nowa determinizacja w każdej
   iteracji, UCB z licznikami dostępności, ruchy rywala kluczowane tym, co bot *widzi* — „rywal zagrywa kartę X”).
   - `determinize.ts` — losuje Twoją rękę, kolejność obu talii, zakryte Legendy/Eddies i ziarno RNG z kanonicznych
     (posortowanych) multizbiorów; zna listę talii rywala (jawne listy), nie zna ręki ani kolejności.
-    `KnowledgeTracker` pamięta karty, które bot już widział (np. cofnięta jednostka); karta wtasowana z powrotem
-    do talii zachowuje tylko „jest gdzieś w talii”, nigdy pozycję (ważne przy mulliganie).
-  - `playout.ts` — dogrywka polityką greedy (ε=0,1) do początku następnej tury bota, ocena `evaluateBoard`
-    → prawdopodobieństwo (logistyka, skala 160 — **nieskalibrowana**).
+    `KnowledgeTracker` pamięta karty, które bot już widział; karta wtasowana z powrotem do talii zachowuje tylko
+    „jest gdzieś w talii”, nigdy pozycję (ważne przy mulliganie). Swoich zakrytych Legend bot nie zna (CR 5.7.4.1).
+  - `playout.ts` — dogrywka polityką greedy (ε=0,1) do początku następnej tury bota.
+  - `evaluation.ts` — **wyuczona ocena pozycji** (regresja logistyczna na cechach planszy obu graczy, 1000 partii
+    self-play, `pnpm calibrate`): log loss 0.537 / trafność 68.5% na odłożonych partiach, wobec 0.727 / 65.2%
+    dla `evaluateBoard` z silnika (gorzej niż moneta, 0.693). Ten sam model liczy licznik „Win chance” na stole
+    (wyłącznie z informacji publicznych).
   - `search.ts` — budżet iteracji/czasu, scalanie statystyk korzenia z wielu wątków.
-  - `fairness.test.ts` — dwa światy różniące się tylko ukrytymi kartami dają **identyczne** statystyki wyszukiwania (6/6 ✓).
-- Silnik: `processCommandLean` (lokalna łatka 7, `vendor/UPSTREAM.md`) — ~2× szybsze symulacje.
-- Serwer: wspólna pula wątków (`apps/server/src/bot-pool.ts`), ISMCTS dzieli budżet na wątki (root-parallel),
-  bot pamięta, co widział, w UI linia „Bot: N symulacji · ocenia swoje szanse na X%”.
-- Poziomy w lobby: Łatwy, Średni, Trudny, **Bardzo trudny** (`ismcts-fast`, 300 iteracji), **Mistrz** (`ismcts`, 1200 iteracji, wszystkie wątki), Ekspert (oszukuje).
-- `pnpm sim` gra przez `decideBotCommand` (jak serwer), pokazuje czas decyzji i odrzucone komendy; `--iters-a/--iters-b`.
-- `pnpm selftest 2 ismcts-fast` — 2/2 partie, 0 błędów.
+  - `fairness.test.ts` — dwa światy różniące się tylko ukrytymi kartami dają **identyczne** statystyki wyszukiwania.
+- Silnik: `processCommandLean` (lokalna łatka 7) — ~2× szybsze symulacje.
+- Serwer: wspólna pula wątków (`apps/server/src/bot-pool.ts`), ISMCTS dzieli budżet na wątki (root-parallel).
+- Poziomy: Easy, Normal, Hard (upstream), **Very Hard** (`ismcts-fast`, 300 iteracji), **Master** (`ismcts`,
+  1200 iteracji na wszystkich wątkach), Expert (oszukuje).
+- Narzędzia: `pnpm bench` (wiele par talii, raport do `docs/BENCHMARK.md`), `pnpm calibrate`, `pnpm sim --opts-a`.
 
-Pomiary (Heist vs Embracing Power, ziarna parami z zamianą miejsc, 16 gier, 16 wątków naraz):
-| A | B | wynik A | 95% CI | czas decyzji A |
-|---|---|---|---|---|
-| ISMCTS 300 it. | greedy | 9/16 = 56% | 33–77% | ~2,3 s (16 gier równolegle) |
-| ISMCTS 300 it. | masterful | 11/16 = 69% | 44–86% | ~2,0 s |
+Wyniki: **[`docs/BENCHMARK.md`](BENCHMARK.md)** — Very Hard wygrywa z Hard 26/32 = 81% (95% CI 65–91%)
+na 8 parach talii; z oceną `evaluateBoard` było 18/32 = 56%.
 
-Do zrobienia w następnej sesji:
-1. Kalibracja skali oceny (`evalScale`) na partiach self-play; porównać horyzont dogrywki (`turns` 1 vs 2) i ε.
-2. Redukcja wariancji (wspólne liczby losowe / więcej światów na iterację) i/lub lepsza polityka dogrywki.
-3. Pełny benchmark `tools/sim/src/bench.ts`: ISMCTS 300/1200 vs greedy/tactical/masterful na kilku parach talii,
-   ≥40 gier na parę → `docs/BENCHMARK.md`.
-4. Sprawdzić ręcznie w przeglądarce czas tury „Mistrza” (cel ≤ 4 s/ruch) i ewentualnie dostroić budżety.
-5. Commit + ZIP (na tym komputerze brak `git` w PATH — zainstalować Git for Windows).
+Do zrobienia:
+1. Strojenie: horyzont dogrywki (`turns` 1 vs 2), ε, stała eksploracji; większe próbki (≥ 64 partie na porównanie).
+2. Słabe dopasowania (np. Judy vs Yorinobu 0/4) — obejrzeć partie i sprawdzić, czego bot nie widzi.
+3. Ocena pozycji: więcej cech (np. koszty kart w Fixerze/Overtime), trening na partiach ISMCTS zamiast greedy (etap 6).
 
 ## Etap 2 — notatki techniczne
 - Serwer liczy listę legalnych akcji silnikiem (`enumerateCandidateActions` / `enumerateChoiceActions`)

@@ -11,14 +11,14 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LocalEngine, createMatchState, createPlayerId, evaluateBoard, filterMatchView, type PlayerId } from "@tcg/cyberpunk-engine";
-import { checkDeckLegality, getCatalog, toEngineDeckList, type Deck } from "@cpai/core";
+import { getCatalog, isDeckLegal, toEngineDeckList, type Deck } from "@cpai/core";
 import { actorOf, decideBotCommand, ensureRegistry, fitLogistic, positionFeatures, predict } from "@cpai/ai";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const decks = readdirSync(join(root, "data/decks"))
   .filter((f) => f.endsWith(".json"))
   .map((f) => JSON.parse(readFileSync(join(root, "data/decks", f), "utf8")) as Deck)
-  .filter((d) => checkDeckLegality(d).length === 0);
+  .filter((d) => isDeckLegal(d));
 
 ensureRegistry();
 const catalog = getCatalog();

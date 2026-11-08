@@ -58,8 +58,8 @@ async function main() {
   const deckA = loadDeck(String(args.a ?? "starter-the-heist"));
   const deckB = loadDeck(String(args.b ?? "starter-embracing-power"));
   for (const d of [deckA, deckB]) {
-    const problems = checkDeckLegality(d);
-    if (problems.length) throw new Error(`Talia ${d.id} jest nielegalna: ${problems.map((p) => p.message).join("; ")}`);
+    const problems = checkDeckLegality(d).filter((p) => p.severity === "error");
+    if (problems.length) throw new Error(`Deck ${d.id} is not legal: ${problems.map((p) => p.message).join("; ")}`);
   }
   const strategyA = String(args["bot-a"] ?? "tactical");
   const strategyB = String(args["bot-b"] ?? "greedy");

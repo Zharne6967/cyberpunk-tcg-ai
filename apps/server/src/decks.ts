@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkDeckLegality, deckFromText, deckSize, deckToText, getCatalog, type Deck, type DeckSummary } from "@cpai/core";
+import { checkDeckLegality, deckFromText, deckSize, deckToText, getCatalog, isDeckLegal, type Deck, type DeckSummary } from "@cpai/core";
 import { DATA_DIR, USER_DECKS_DIR } from "./paths.ts";
 
 const BUILTIN_DIR = join(DATA_DIR, "decks");
@@ -43,7 +43,7 @@ export function summarizeDeck(deck: Deck): DeckSummary {
     legends: deck.legends,
     size: deckSize(deck),
     colors,
-    legal: checkDeckLegality(deck).length === 0,
+    legal: isDeckLegal(deck),
     editable: isUserDeck(deck.id),
   };
 }
@@ -58,12 +58,24 @@ export function sanitizeDeck(input: unknown): Deck {
   if (!SAFE_ID.test(id)) throw new Error("Invalid deck id");
   const name = String(d.name ?? "").trim().slice(0, 80) || "Untitled deck";
   const legends = (Array.isArray(d.legends) ? d.legends : []).map(String).filter((s) => catalog.bySlug(s)).slice(0, 3);
-  const main: Record<string, number> = {};
-  for (const [slug, n] of Object.entries(d.main ?? {})) {
-    const count = Math.floor(Number(n));
-    if (catalog.bySlug(slug) && count > 0) main[slug] = Math.min(count, 50);
-  }
-  return { id, name, source: { kind: "user", date: new Date().toISOString().slice(0, 10) }, legends, main };
+  const counts = (input: Record<string, number> | undefined) => {
+    const out: Record<string, number> = {};
+    for (const [slug, n] of Object.entries(input ?? {})) {
+      const count = Math.floor(Number(n));
+      if (catalog.bySlug(slug) && count > 0) out[slug] = Math.min(count, 50);
+    }
+    return out;
+  };
+  const main = counts(d.main);
+  const sideboard = counts(d.sideboard);
+  return {
+    id,
+    name,
+    source: { kind: "user", date: new Date().toISOString().slice(0, 10) },
+    legends,
+    main,
+    ...(Object.keys(sideboard).length ? { sideboard } : {}),
+  };
 }
 
 export function saveUserDeck(deck: Deck): void {
@@ -81,7 +93,7 @@ export function deleteUserDeck(id: string): boolean {
 /** Legality problems + the deck as a shareable text list. */
 export function checkDeck(deck: Deck) {
   const problems = checkDeckLegality(deck);
-  return { problems, legal: problems.length === 0, size: deckSize(deck), text: deckToText(deck) };
+  return { problems, legal: problems.every((p) => p.severity !== "error"), size: deckSize(deck), text: deckToText(deck) };
 }
 
 /** Parse a pasted deck list (deck sites' "3x Card Name" format) into an unsaved deck. */

@@ -12,7 +12,7 @@ import { cpus } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import { checkDeckLegality, type Deck } from "@cpai/core";
+import { isDeckLegal, type Deck } from "@cpai/core";
 import { STRATEGIES } from "@cpai/ai";
 import type { MatchOutcome, MatchSpec } from "./match.ts";
 
@@ -52,7 +52,7 @@ async function main() {
     .filter((f) => f.endsWith(".json"))
     .sort()
     .map((f) => JSON.parse(readFileSync(join(root, "data/decks", f), "utf8")) as Deck)
-    .filter((d) => checkDeckLegality(d).length === 0);
+    .filter((d) => isDeckLegal(d));
   const nPairs = Number(args.pairs ?? 8);
   const perPair = Math.max(2, Math.floor(Number(args.games ?? 4) / 2) * 2);
   // Deterministic spread of pairs over the deck list (different decks each side).

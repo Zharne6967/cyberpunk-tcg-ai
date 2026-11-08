@@ -49,6 +49,8 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
   const [ram, setRam] = useState<string>("all");
   const [matchRam, setMatchRam] = useState(false);
   const [sort, setSort] = useState<"cost" | "name" | "number">("cost");
+  const [target, setTarget] = useState<"main" | "side">("main");
+  const [drawPct, setDrawPct] = useState(false);
 
   const refreshDecks = () => api.decks().then((d) => setDecks(d.sort((a, b) => a.name.localeCompare(b.name))));
   useEffect(() => {
@@ -115,7 +117,24 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
     setDeck(fn);
     setDirty(true);
   };
+  const sideCount = Object.values(deck.sideboard ?? {}).reduce((s, n) => s + n, 0);
+  const addSide = (c: CardData) => {
+    if (c.type === "legend") return setToast("Legends cannot be in the sideboard");
+    if (sideCount >= 7) return setToast("Sideboard is full (7)");
+    const n = deck.sideboard?.[c.slug] ?? 0;
+    if (n >= MAX_COPIES) return setToast(`Max ${MAX_COPIES} copies`);
+    update((d) => ({ ...d, sideboard: { ...(d.sideboard ?? {}), [c.slug]: n + 1 } }));
+  };
+  const removeSide = (slug: string) =>
+    update((d) => {
+      const side = { ...(d.sideboard ?? {}) };
+      const n = (side[slug] ?? 0) - 1;
+      if (n > 0) side[slug] = n;
+      else delete side[slug];
+      return { ...d, sideboard: side };
+    });
   const add = (c: CardData) => {
+    if (target === "side") return addSide(c);
     if (c.type === "legend") {
       if (deck.legends.includes(c.slug)) return update((d) => ({ ...d, legends: d.legends.filter((s) => s !== c.slug) }));
       if (deck.legends.length >= 3) return setToast("Legend area is full (3)");
@@ -146,6 +165,17 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
   const curve = COSTS.map((b) => mainCards.filter((x) => bucket(x.card.cost, 7) === b).reduce((s, x) => s + x.n, 0));
   const curveMax = Math.max(1, ...curve);
   const colorCount = COLORS.map((c) => ({ c, n: mainCards.filter((x) => x.card.color === c).reduce((s, x) => s + x.n, 0) })).filter((x) => x.n);
+  /** Chance to have at least one copy in the 6-card opening hand (hypergeometric). */
+  const openingChance = (copies: number) => {
+    if (size < 6) return 0;
+    let none = 1;
+    for (let i = 0; i < 6; i++) none *= Math.max(0, size - copies - i) / (size - i);
+    return 1 - none;
+  };
+  const sideCards = Object.entries(deck.sideboard ?? {})
+    .map(([slug, n]) => ({ card: db.bySlug.get(slug), n }))
+    .filter((x): x is { card: CardData; n: number } => !!x.card)
+    .sort((a, b) => (a.card.cost ?? 0) - (b.card.cost ?? 0) || a.card.displayName.localeCompare(b.card.displayName));
   const groups = (["unit", "gear", "program"] as const).map((t) => ({
     t,
     cards: mainCards.filter((x) => x.card.type === t).sort((a, b) => (a.card.cost ?? 0) - (b.card.cost ?? 0) || a.card.displayName.localeCompare(b.card.displayName)),
@@ -279,6 +309,15 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
               </label>
             </div>
             <div className="filter-row">
+              <span className="f-label">Add to</span>
+              <button className={`chip ${target === "main" ? "sel" : ""}`} onClick={() => setTarget("main")}>
+                Main Deck
+              </button>
+              <button className={`chip ${target === "side" ? "sel" : ""}`} onClick={() => setTarget("side")}>
+                Sideboard
+              </button>
+            </div>
+            <div className="filter-row">
               <span className="f-label">Sort</span>
               {(["cost", "name", "number"] as const).map((s) => (
                 <button key={s} className={`chip ${sort === s ? "sel" : ""}`} onClick={() => setSort(s)}>
@@ -303,6 +342,7 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
                 >
                   <CardFace card={c} size="md" />
                   {n > 0 && <span className="count">{c.type === "legend" ? "✓" : `x${n}`}</span>}
+                  {(deck.sideboard?.[c.slug] ?? 0) > 0 && <span className="count side">SB {deck.sideboard![c.slug]}</span>}
                 </button>
               );
             })}
@@ -332,10 +372,12 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
               <b>{check ? (check.legal ? "Legal ✓" : "Not legal") : "…"}</b>
             </div>
           </div>
-          {check && !check.legal && (
+          {check && check.problems.length > 0 && (
             <ul className="problems">
               {check.problems.map((p, i) => (
-                <li key={i}>{p.message}</li>
+                <li key={i} className={p.severity}>
+                  {p.message}
+                </li>
               ))}
             </ul>
           )}
@@ -402,6 +444,9 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
               <button className="btn small" disabled={size < 6} onClick={drawHand}>
                 Draw Starting Hand
               </button>
+              <label className="opt">
+                <input type="checkbox" checked={drawPct} onChange={(e) => setDrawPct(e.target.checked)} /> Draw %
+              </label>
             </div>
           </div>
 
@@ -425,9 +470,22 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
                         <CardFace card={card} size="md" />
                       </button>
                       <span className="count">x{n}</span>
+                      {drawPct && (
+                        <span className="draw-pct" title="Chance to have at least one in the opening hand (6 cards)">
+                          {Math.round(openingChance(n) * 100)}%
+                        </span>
+                      )}
                       <div className="qty">
                         <button onClick={() => remove(card.slug)}>−</button>
-                        <button onClick={() => add(card)}>+</button>
+                        <button
+                          onClick={() => {
+                            const n2 = deck.main[card.slug] ?? 0;
+                            if (n2 >= MAX_COPIES) return setToast(`Max ${MAX_COPIES} copies`);
+                            update((d) => ({ ...d, main: { ...d.main, [card.slug]: n2 + 1 } }));
+                          }}
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -435,6 +493,32 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
               </div>
             ) : null,
           )}
+
+          <h3>
+            Sideboard <span className="muted small">{sideCount}/7</span>
+          </h3>
+          <div className="deck-grid">
+            {sideCards.map(({ card, n }) => (
+              <div key={card.slug} className="deck-card" title={card.displayName}>
+                <button
+                  className="deck-card-face"
+                  onClick={() => removeSide(card.slug)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setInspect(card.id);
+                  }}
+                >
+                  <CardFace card={card} size="md" />
+                </button>
+                <span className="count">x{n}</span>
+                <div className="qty">
+                  <button onClick={() => removeSide(card.slug)}>−</button>
+                  <button onClick={() => addSide(card)}>+</button>
+                </div>
+              </div>
+            ))}
+            {!sideCards.length && <div className="legend-empty side-empty">SIDEBOARD</div>}
+          </div>
         </section>
       </div>
 

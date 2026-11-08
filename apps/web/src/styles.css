@@ -366,3 +366,9 @@ a { color: var(--cyan); }
 .chance-chart svg { display: block; margin: 4px auto 0; overflow: visible; }
 .chance-chart polyline { fill: none; stroke: var(--yellow); stroke-width: 2; }
 .chance-chart .mid { stroke: #ffffff33; stroke-dasharray: 4 4; }
+
+/* deck builder: sideboard, draw % */
+.count.side { top: auto; bottom: 4px; right: 4px; border-color: var(--cyan); color: var(--cyan); }
+.draw-pct { position: absolute; top: 4px; left: 4px; background: #000d; color: var(--cyan); border: 1px solid var(--cyan); font-weight: 800; font-size: 11px; padding: 0 4px; border-radius: 3px; }
+.side-empty { width: var(--card-w); height: var(--card-h); }
+.problems li.warning { color: var(--yellow); }
