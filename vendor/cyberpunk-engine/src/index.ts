@@ -30,6 +30,7 @@ export {
 export type { PriorityView } from "./state/turn-info.ts";
 export {
   processCommand,
+  processCommandLean,
   validateCommand,
   enumerateMoves,
   registerMove,

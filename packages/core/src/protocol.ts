@@ -75,6 +75,8 @@ export interface LogLine {
   text: string;
   /** Public cards mentioned in the line (clickable in the UI). */
   cards: { instanceId: string; definitionId: string }[];
+  /** Engine message key (e.g. "setup.firstPlayerChoice"). */
+  key?: string;
 }
 
 export interface ChoiceView {
@@ -99,14 +101,36 @@ export interface GameStateMessage {
   botThinking: boolean;
   /** Instance ids the bot touched in its latest action (for highlighting). */
   botLastCardIds: string[];
+  /** Last ISMCTS search of the bot: simulations run and its estimated chance to win. */
+  botInfo: null | { iterations: number; winRate: number; ms: number };
   result: null | { winner: "you" | "bot" | "draw"; reason: string | null };
 }
 
-export type ServerMessage = GameStateMessage | { type: "error"; message: string } | { type: "toast"; message: string };
+/**
+ * What the player did on the table (drag & drop, click). The server maps it to the matching legal
+ * engine command, asks to disambiguate when several fit, or answers with the engine's reason.
+ */
+export type Intent =
+  | { kind: "play"; cardId: string; targetId?: string }
+  | { kind: "sell"; cardId: string }
+  | { kind: "call"; cardId: string }
+  | { kind: "attack"; cardId: string; targetId: string | "rival" }
+  | { kind: "block"; cardId: string }
+  | { kind: "activate"; cardId: string }
+  | { kind: "goSolo"; cardId: string }
+  | { kind: "select"; id: string }
+  | { kind: "pass" };
+
+export type ServerMessage =
+  | GameStateMessage
+  | { type: "error"; message: string }
+  | { type: "toast"; message: string }
+  | { type: "options"; title: string; options: { id: string; label: string }[] };
 
 export type ClientMessage =
   | { type: "action"; actionId: string; stateID: number }
   | { type: "command"; move: string; args?: Record<string, unknown>; stateID: number }
+  | { type: "intent"; intent: Intent; stateID: number }
   | { type: "setBotSpeed"; ms: number }
   | { type: "concede" };
 

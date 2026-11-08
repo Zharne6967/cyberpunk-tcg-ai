@@ -144,7 +144,10 @@ function sourceForViewer(
     ["field", "legendArea", "trash", "removedFromGame"].includes(source.zone) &&
     !source.meta.faceDown;
   const ownKnownSource =
-    viewerId !== undefined && source.controllerId === viewerId && source.zone !== "deck";
+    viewerId !== undefined &&
+    source.controllerId === viewerId &&
+    source.zone !== "deck" &&
+    !(source.zone === "legendArea" && source.meta.faceDown);
   if (!publicSource && !ownKnownSource && !source.meta.revealed) {
     return { sourceName: "Effect" };
   }
@@ -394,7 +397,9 @@ function filterZoneCards(
     .filter((c): c is CardInstance => c !== undefined)
     .map((card) => {
       if (card.meta.revealed) return toCardView(card, state, viewerId);
-      if (zone === "legendArea" && card.meta.faceDown && !isOwner) {
+      // cyberpunk-tcg-ai local patch: CR 5.7.4.1 — face-down Legends are hidden from their owner
+      // too (only an effect that lets you look sets `revealed`). Upstream showed them to the owner.
+      if (zone === "legendArea" && card.meta.faceDown) {
         return toFaceDownCardView(card, state);
       }
       if (zone === "eddieArea" && card.meta.faceDown) {

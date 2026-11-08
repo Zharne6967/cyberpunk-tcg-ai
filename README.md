@@ -4,8 +4,8 @@ Nieoficjalny projekt fanowski (niepowiązany z CD PROJEKT RED ani WeirdCo). Apli
 lokalnie na Twoim komputerze: grasz w przeglądarce przeciwko botowi, który zna wszystkie karty,
 gra zgodnie z oficjalnymi zasadami, analizuje talie i uczy się na błędach.
 
-> Stan: **etap 2 z 8** — można grać w przeglądarce przeciwko botowi. Silniejszy, uczący się bot
-> przyjdzie w etapach 3–4. Plan: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> Stan: **etap 3 z 8 (w toku)** — można grać w przeglądarce przeciwko botowi, w tym nowym uczciwym
+> botowi ISMCTS („Bardzo trudny”, „Mistrz”). Uczący się bot — etap 4. Plan: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Szybki start (Windows)
 1. Zainstaluj **Node.js LTS** z https://nodejs.org (jeśli jeszcze nie masz).
@@ -14,19 +14,29 @@ gra zgodnie z oficjalnymi zasadami, analizuje talie i uczy się na błędach.
    Okno konsoli musi zostać otwarte, dopóki grasz; zamknięcie go wyłącza serwer.
 
 ## Jak grać
-- W lobby wybierz swoją talię, talię bota (albo losową) i poziom bota → **Graj**.
-- Karty z **niebieską poświatą** mają dostępne akcje — kliknij je, by zobaczyć menu (zagraj, atakuj,
-  podłącz Gear, użyj zdolności, przywołaj Legendę…). Wszystkie akcje są też po prawej, w panelu akcji.
-- **Prawy przycisk** na karcie (albo „Szczegóły”) — pełny opis karty, aktualna siła, aktywne efekty
-  i oficjalne FAQ. Karty zagrane przez bota pulsują na różowo; w logu ikona 🔍 pokazuje kartę.
-- **Enter** = „Zakończ turę” / „Pas”. Tempo ruchów bota ustawisz w prawym górnym rogu.
-- Każda partia zapisuje się w `var/games/` — z tych zapisów bot będzie się uczył (etap 4).
+Interfejs gry jest po angielsku i używa oficjalnych nazw z zasad (Play a Card, Sell a Card, Call a Legend…).
+Stół wygląda jak dwie maty naprzeciw siebie: Twoja na dole, bota (obrócona) u góry, Gigi obu graczy w środku.
+- W lobby wybierz swoją talię, talię bota (albo losową) i poziom bota → **Play**.
+- Na starcie okienko: los wybiera gracza, który decyduje, kto zaczyna; potem **Keep** albo **Mulligan**.
+- **Przeciągaj karty**: z ręki na **FIELD** (zagranie), na swoją Jednostkę (Gear), na **EDDIES** (sprzedaż);
+  swoją Jednostką na Jednostkę rywala (atak) albo na **RIVAL GIGS** (atak na Gigi); w React Step swoją
+  Jednostką na atakującego (blok).
+- **Klik w kartę** — menu z oficjalnymi akcjami (np. Call a Legend na zakrytej Legendzie, Activate an Effect,
+  Attack). Menu nie podpowiada, co jest legalne — jeśli ruch jest niedozwolony, silnik wyświetli powód.
+- **Prawy przycisk** — podgląd karty z oficjalnymi rulingami. **Klik w TRASH** — zawartość kosza.
+- Gdy zasady każą coś wybrać (cel, kość Giga, kolejność efektów), po prawej pojawia się panel decyzji;
+  możesz też kliknąć kartę/kość na stole.
+- **Enter** albo przycisk w środku stołu = **Pass Turn** / **Pass**.
+- **Learning mode** (przełącznik u góry) — podświetla karty z legalnymi ruchami i pokazuje listę akcji.
+  Domyślnie wyłączony: grasz jak na żywo i sam pamiętasz, co możesz zrobić.
+- Każda partia zapisuje się w `var/games/` — z tych zapisów bot będzie się uczył (etap 6).
 
 ## Co już działa
 - **Gra w przeglądarce przeciwko botowi** (etap 2): pełne zasady (mulligan, Gigi, Eddies, sprzedaż,
   Legendy, Gear, ataki, blokowanie, kradzież Gigów, wszystkie wybory kart), polski interfejs i log,
   podgląd kart z FAQ, obrazki kart pobierane raz i trzymane lokalnie (`var/images`).
-  Poziomy: Łatwy, Średni, Trudny (uczciwe) oraz Ekspert (podgląda karty — do treningu pod presją).
+  Poziomy: Easy, Normal, Hard, Very Hard, Master (uczciwe — nie widzą Twojej ręki ani kolejności talii;
+  Very Hard i Master to nowy bot ISMCTS z etapu 3) oraz Expert (podgląda karty).
 - **Silnik zasad** zgodny z aktualnymi Comprehensive Rules (7 Gigów, Overtime, Lag, React step,
   Call a Legend, Sell for Turn…), 152 karty — każda z testem. ~2860 testów przechodzi.
 - **Baza kart** `data/cards.json`: koszt, siła, RAM, kolor, tagi, słowa kluczowe, pełny tekst,

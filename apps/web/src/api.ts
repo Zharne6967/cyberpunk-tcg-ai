@@ -54,5 +54,5 @@ export const api = {
   gameExists: (id: string) => getJson<{ gameId: string }>(`/api/games/${id}`),
 };
 
-export const COLOR_PL: Record<string, string> = { red: "czerwony", blue: "niebieski", green: "zielony", yellow: "żółty" };
-export const TYPE_PL: Record<string, string> = { legend: "Legenda", unit: "Jednostka", gear: "Gear", program: "Program" };
+export const COLOR_NAME: Record<string, string> = { red: "Red", blue: "Blue", green: "Green", yellow: "Yellow" };
+export const TYPE_NAME: Record<string, string> = { legend: "Legend", unit: "Unit", gear: "Gear", program: "Program" };

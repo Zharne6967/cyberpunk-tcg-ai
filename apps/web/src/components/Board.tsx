@@ -1,15 +1,35 @@
-import type { CardView, GameStateMessage, PlayerView, UiAction } from "@cpai/core/protocol";
+import { useState, type DragEvent, type ReactNode } from "react";
+import type { CardView, GameStateMessage, Intent, PlayerView, UiAction } from "@cpai/core/protocol";
 import type { CardDb } from "../api.ts";
-import { CardBack, CardFace } from "./CardFace.tsx";
+import { CardBack, CardFace, type CardSize } from "./CardFace.tsx";
+
+/**
+ * The table, laid out like the official playmat: each player has a Fixer column (D20…D4), the field,
+ * the Legends and Eddies areas and the deck/trash piles. The rival's mat is turned 180°, both Gig
+ * areas meet in the middle (RIVAL GIGS | FRIENDLY GIGS), like two mats facing each other.
+ */
+
+export interface DragInfo {
+  cardId: string;
+  from: "hand" | "field" | "legendArea";
+}
 
 export interface BoardCtx {
   db: CardDb;
   state: GameStateMessage;
+  /** Learning mode: glow on cards with legal actions, status tags. */
+  hints: boolean;
   actionsByCard: Map<string, UiAction[]>;
   highlight: Set<string>;
-  onCard: (card: CardView, anchor: HTMLElement) => void;
+  onCardClick: (card: CardView, anchor: HTMLElement) => void;
+  onGigAreaClick: (seat: string) => void;
   onInspect: (card: CardView) => void;
+  onIntent: (intent: Intent) => void;
+  onTrash: (seat: string) => void;
 }
+
+// One drag at a time; module state keeps drag-over re-renders cheap.
+let dragging: DragInfo | null = null;
 
 export function cardData(db: CardDb, c: CardView | undefined) {
   if (!c || !c.cardName) return undefined;
@@ -25,198 +45,337 @@ function zoneCount(p: PlayerView, name: string): number {
   return Array.isArray(z) ? z.length : (z ?? 0);
 }
 
+/** What dropping the current drag onto `target` means (null = nothing). */
+function dropIntent(ctx: BoardCtx, target: { kind: "field" | "eddies" | "rivalGigs" } | { kind: "card"; card: CardView }): Intent | null {
+  const d = dragging;
+  if (!d) return null;
+  const you = ctx.state.you;
+  if (target.kind === "field") return d.from === "hand" || d.from === "legendArea" ? { kind: "play", cardId: d.cardId } : null;
+  if (target.kind === "eddies") return d.from === "hand" ? { kind: "sell", cardId: d.cardId } : null;
+  if (target.kind === "rivalGigs") return d.from === "field" ? { kind: "attack", cardId: d.cardId, targetId: "rival" } : null;
+  if (target.kind !== "card") return null;
+  const t = target.card;
+  const mineTarget = ownerOf(ctx.state, t.instanceId) === you;
+  if (d.from === "hand" && mineTarget) return { kind: "play", cardId: d.cardId, targetId: t.instanceId };
+  if (d.from === "field" && !mineTarget) {
+    const att = ctx.state.view.attackState;
+    if (att?.step === "react" && att.attackerId === t.instanceId) return { kind: "block", cardId: d.cardId };
+    return { kind: "attack", cardId: d.cardId, targetId: t.instanceId };
+  }
+  return null;
+}
+
+function ownerOf(s: GameStateMessage, id: string): string | undefined {
+  for (const [seat, p] of Object.entries(s.view.players))
+    for (const z of Object.values(p.zones)) if (Array.isArray(z) && z.some((c) => c.instanceId === id)) return seat;
+  return undefined;
+}
+
+/** Drop-zone props: a plain hover outline while something is dragged over (no legality hints). */
+function useDrop(ctx: BoardCtx, target: Parameters<typeof dropIntent>[1]) {
+  const [over, setOver] = useState(false);
+  return {
+    over,
+    props: {
+      onDragOver: (e: DragEvent) => {
+        if (!dragging) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!over) setOver(true);
+      },
+      onDragLeave: () => setOver(false),
+      onDrop: (e: DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setOver(false);
+        const intent = dropIntent(ctx, target);
+        dragging = null;
+        if (intent) ctx.onIntent(intent);
+      },
+    },
+  };
+}
+
 function PowerBadge({ c }: { c: CardView }) {
-  if (c.type !== "unit" && c.type !== "legend") return null;
-  if (c.type === "legend" && c.zone !== "field") return null;
+  if (c.zone !== "field" || (c.type !== "unit" && c.type !== "legend")) return null;
   const diff = c.effectivePower - c.power;
   return <span className={`pow ${diff > 0 ? "up" : diff < 0 ? "down" : ""}`}>{c.effectivePower}</span>;
 }
 
-export function CardSlot({ c, ctx, size = "md", extraClass = "" }: { c: CardView; ctx: BoardCtx; size?: "sm" | "md" | "lg"; extraClass?: string }) {
+export function TableCard({ c, ctx, size = "md", dragFrom, dropTarget }: { c: CardView; ctx: BoardCtx; size?: CardSize; dragFrom?: DragInfo["from"]; dropTarget?: boolean }) {
   const data = cardData(ctx.db, c);
-  const acts = ctx.actionsByCard.get(c.instanceId);
+  const drop = useDrop(ctx, { kind: "card", card: c });
+  const acts = ctx.hints ? ctx.actionsByCard.get(c.instanceId) : undefined;
   const cls = [
-    "slot",
+    "tcard",
     size,
     c.spent ? "spent" : "",
     acts?.length ? "actionable" : "",
     ctx.highlight.has(c.instanceId) ? "hl" : "",
     ctx.state.botLastCardIds.includes(c.instanceId) ? "bot-last" : "",
-    extraClass,
+    drop.over ? "drop-over" : "",
   ].join(" ");
+  const canDrag = !!dragFrom && !(c.faceDown && !data);
   return (
     <div
       className={cls}
-      title={data ? `${data.displayName}${acts?.length ? " — kliknij, aby wybrać akcję" : " — kliknij, aby obejrzeć"}` : "Zakryta karta"}
-      onClick={(e) => (acts?.length ? ctx.onCard(c, e.currentTarget) : data ? ctx.onInspect(c) : undefined)}
+      draggable={canDrag}
+      onDragStart={(e) => {
+        dragging = { cardId: c.instanceId, from: dragFrom! };
+        e.dataTransfer.setData("text/plain", c.instanceId);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      onDragEnd={() => (dragging = null)}
+      onClick={(e) => {
+        e.stopPropagation();
+        ctx.onCardClick(c, e.currentTarget);
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         if (data) ctx.onInspect(c);
       }}
+      {...(dropTarget ? drop.props : {})}
     >
-      <div className="slot-card">{c.faceDown && !data ? <CardBack size={size} /> : <CardFace card={data} size={size} showText={size !== "sm"} />}</div>
-      {c.faceDown && data && <span className="tag fd">zakryta</span>}
+      <div className="tcard-inner">{c.faceDown && !data ? <CardBack size={size} kind={c.zone === "legendArea" ? "legend" : "deck"} /> : <CardFace card={data} size={size} showText={size === "md" || size === "lg"} />}</div>
       <PowerBadge c={c} />
-      {c.hasLag && c.zone === "field" && <span className="tag lag">LAG</span>}
-      {c.spent && <span className="tag spent-tag">SPENT</span>}
-      {c.activeEffects.length > 0 && <span className="tag fx" title={c.activeEffects.map((e) => `${e.sourceName}: ${e.label}`).join("\n")}>FX {c.activeEffects.length}</span>}
-    </div>
-  );
-}
-
-function UnitWithGear({ c, all, ctx }: { c: CardView; all: Map<string, CardView>; ctx: BoardCtx }) {
-  const gear = c.attachedGearIds.map((id) => all.get(id)).filter((g): g is CardView => !!g);
-  return (
-    <div className="unit-stack">
-      <CardSlot c={c} ctx={ctx} />
-      {gear.length > 0 && (
-        <div className="gear-row">
-          {gear.map((g) => (
-            <CardSlot key={g.instanceId} c={g} ctx={ctx} size="sm" extraClass="gear" />
-          ))}
-        </div>
+      {ctx.hints && c.hasLag && c.zone === "field" && <span className="tag lag">LAG</span>}
+      {ctx.hints && c.activeEffects.length > 0 && (
+        <span className="tag fx" title={c.activeEffects.map((e) => `${e.sourceName}: ${e.label}`).join("\n")}>
+          FX {c.activeEffects.length}
+        </span>
       )}
     </div>
   );
 }
 
-export function GigDie({ d, ctx }: { d: CardView; ctx: BoardCtx }) {
-  const acts = ctx.actionsByCard.get(d.instanceId);
-  const sides = String(d.definitionId);
+/** Die silhouettes drawn as outlines, like the dice spaces printed on the playmat. */
+const DIE_SHAPE: Record<string, string> = {
+  d4: "50,8 94,88 6,88",
+  d6: "12,12 88,12 88,88 12,88",
+  d8: "50,4 95,50 50,96 5,50",
+  d10: "50,4 92,44 50,96 8,44",
+  d12: "50,5 95,38 78,93 22,93 5,38",
+  d20: "50,3 93,27 93,73 50,97 7,73 7,27",
+};
+
+function DieSvg({ type, value }: { type: string; value?: number }) {
+  const label = type.toUpperCase();
+  const textY = type === "d4" ? 70 : 50;
+  return (
+    <svg viewBox="0 0 100 100" className="die-svg" aria-hidden>
+      <polygon points={DIE_SHAPE[type] ?? DIE_SHAPE.d6} className="die-outline" />
+      {type === "d20" && <polygon points="50,24 74,66 26,66" className="die-inner" />}
+      {value != null ? (
+        <>
+          <text x="50" y={textY - 4} className="die-value">
+            {value}
+          </text>
+          <text x="50" y={textY + 22} className="die-sub">
+            {label}
+          </text>
+        </>
+      ) : (
+        <text x="50" y={textY + 4} className="die-label">
+          {label}
+        </text>
+      )}
+    </svg>
+  );
+}
+
+function Die({ d, ctx, empty, type }: { d?: CardView; ctx: BoardCtx; empty?: boolean; type: string }) {
+  if (empty || !d)
+    return (
+      <div className={`die die-${type} empty`}>
+        <DieSvg type={type} />
+      </div>
+    );
+  const acts = ctx.hints ? ctx.actionsByCard.get(d.instanceId) : undefined;
   return (
     <button
-      className={`die ${sides} ${acts?.length ? "actionable" : ""} ${ctx.highlight.has(d.instanceId) ? "hl" : ""}`}
-      title={`${sides}, wartość ${d.power}`}
-      onClick={(e) => acts?.length && ctx.onCard(d, e.currentTarget)}
+      className={`die die-${type} ${d.zone === "gigArea" ? "gig" : ""} ${acts?.length ? "actionable" : ""} ${ctx.highlight.has(d.instanceId) ? "hl" : ""} ${ctx.state.botLastCardIds.includes(d.instanceId) ? "bot-last" : ""}`}
+      title={d.zone === "gigArea" ? `${type.toUpperCase()}: ${d.power}` : type.toUpperCase()}
+      onClick={(e) => {
+        e.stopPropagation();
+        ctx.onCardClick(d, e.currentTarget);
+      }}
     >
-      <span className="die-val">{d.zone === "fixerArea" ? "–" : d.power}</span>
-      <span className="die-type">{sides}</span>
+      <DieSvg type={type} value={d.zone === "gigArea" ? d.power : undefined} />
     </button>
   );
 }
 
-export function PlayerSide({ seat, ctx, mine }: { seat: string; ctx: BoardCtx; mine: boolean }) {
-  const p = ctx.state.view.players[seat]!;
-  const all = new Map<string, CardView>();
-  for (const z of Object.values(p.zones)) if (Array.isArray(z)) for (const c of z) all.set(c.instanceId, c);
-  const field = zone(p, "field").filter((c) => !c.attachedToId);
-  const legends = zone(p, "legendArea");
-  const gigs = zone(p, "gigArea");
+const DICE_ORDER = ["d20", "d12", "d10", "d8", "d6", "d4"];
+
+function Fixer({ p, ctx }: { p: PlayerView; ctx: BoardCtx }) {
   const fixer = zone(p, "fixerArea");
-  const hand = zone(p, "hand");
-  const handCount = zoneCount(p, "hand");
-  const isActive = ctx.state.view.activePlayerId === seat;
-
-  const statusBar = (
-    <div className={`status-bar ${isActive ? "active" : ""}`}>
-      <span className="who">{mine ? "TY" : `BOT · ${ctx.state.botLabel}`}</span>
-      <span className="stat" title="Gigi (wygrywasz, mając 7 na początku swojej tury)">
-        🎲 Gigi <b>{p.gigCount}</b>/7
-      </span>
-      <span className="stat" title="Street Cred = suma wartości Twoich Gigów">
-        ★ Street Cred <b>{p.streetCred}</b>
-      </span>
-      <span className="stat" title="Eddies dostępne / wszystkie">
-        €$ <b>{p.availableEddies}</b>/{p.eddies}
-      </span>
-      <span className="stat">🂠 Talia {zoneCount(p, "deck")}</span>
-      <span className="stat">🗑 Kosz {zoneCount(p, "trash")}</span>
-      {!mine && (
-        <span className="stat" title="Karty na ręce bota (ukryte)">
-          ✋ Ręka {handCount}
-          <span className="mini-backs">
-            {Array.from({ length: Math.min(handCount, 10) }, (_, i) => (
-              <i key={i} />
-            ))}
-          </span>
-        </span>
-      )}
-      {p.soldThisTurn && <span className="tag">sprzedano w tej turze</span>}
-      {p.calledLegendThisTurn && <span className="tag">przywołano Legendę</span>}
-    </div>
-  );
-
-  const legendsAndDice = (
-    <div className="side-row">
-      <div className="legends">
-        <div className="row-label">Legendy</div>
-        <div className="cards">
-          {legends.map((c) => (
-            <CardSlot key={c.instanceId} c={c} ctx={ctx} size="sm" />
-          ))}
-        </div>
-      </div>
-      <div className="gigs">
-        <div className="row-label">Gigi ({gigs.length}/7)</div>
-        <div className="dice">
-          {gigs.length ? gigs.map((d) => <GigDie key={d.instanceId} d={d} ctx={ctx} />) : <span className="muted">brak</span>}
-        </div>
-      </div>
-      <div className="gigs">
-        <div className="row-label">Fixer ({fixer.length})</div>
-        <div className="dice fixer">
-          {fixer.map((d) => (
-            <GigDie key={d.instanceId} d={d} ctx={ctx} />
-          ))}
-        </div>
-      </div>
-      <TrashPeek cards={zone(p, "trash")} ctx={ctx} />
-    </div>
-  );
-
-  const fieldRow = (
-    <div className={`field ${mine ? "mine" : "theirs"}`}>
-      {field.length ? field.map((c) => <UnitWithGear key={c.instanceId} c={c} all={all} ctx={ctx} />) : <span className="muted empty-field">— pole puste —</span>}
-    </div>
-  );
-
-  if (mine) {
-    return (
-      <div className="side mine">
-        {fieldRow}
-        {legendsAndDice}
-        {statusBar}
-        <div className="hand">
-          {hand.map((c) => (
-            <CardSlot key={c.instanceId} c={c} ctx={ctx} />
-          ))}
-        </div>
-      </div>
-    );
-  }
   return (
-    <div className="side theirs">
-      {statusBar}
-      {legendsAndDice}
-      {fieldRow}
+    <div className="mat-fixer">
+      {DICE_ORDER.map((t) => {
+        const d = fixer.find((x) => String(x.definitionId).toLowerCase() === t);
+        return <Die key={t} d={d} ctx={ctx} empty={!d} type={t} />;
+      })}
+      <div className="mat-label">FIXER</div>
     </div>
   );
 }
 
-function TrashPeek({ cards, ctx }: { cards: CardView[]; ctx: BoardCtx }) {
-  const top = cards.at(-1);
+export function GigArea({ seat, ctx, label, rival }: { seat: string; ctx: BoardCtx; label: string; rival: boolean }) {
+  const p = ctx.state.view.players[seat]!;
+  const gigs = zone(p, "gigArea");
+  const drop = useDrop(ctx, { kind: "rivalGigs" });
   return (
-    <div className="trash-peek">
-      <div className="row-label">Kosz ({cards.length})</div>
-      {top ? (
-        <div className="trash-top">
-          <CardSlot c={top} ctx={ctx} size="sm" />
-          {cards.length > 1 && (
-            <details className="trash-all">
-              <summary>pokaż wszystkie</summary>
-              <div className="trash-list">
-                {[...cards].reverse().map((c) => (
-                  <button key={c.instanceId} className="linklike" onClick={() => ctx.onInspect(c)}>
-                    {c.cardName}
-                  </button>
-                ))}
-              </div>
-            </details>
-          )}
-        </div>
-      ) : (
-        <span className="muted">pusty</span>
-      )}
+    <div
+      className={`gig-area ${rival ? "rival" : "friendly"} ${drop.over ? "drop-over" : ""}`}
+      onClick={() => ctx.onGigAreaClick(seat)}
+      {...(rival ? drop.props : {})}
+    >
+      <div className="mat-label">{label}</div>
+      <div className="gig-dice">
+        {gigs.map((d) => (
+          <Die key={d.instanceId} d={d} ctx={ctx} type={String(d.definitionId).toLowerCase()} />
+        ))}
+      </div>
+      <div className="gig-count" title="Street Cred">
+        <b>{p.gigCount}</b>/7 <span className="cred">★ {p.streetCred}</span>
+      </div>
     </div>
   );
+}
+
+function Field({ p, ctx, mine }: { p: PlayerView; ctx: BoardCtx; mine: boolean }) {
+  const drop = useDrop(ctx, { kind: "field" });
+  const all = new Map<string, CardView>();
+  for (const z of Object.values(p.zones)) if (Array.isArray(z)) for (const c of z) all.set(c.instanceId, c);
+  const units = zone(p, "field").filter((c) => !c.attachedToId);
+  return (
+    <div className={`mat-field ${drop.over ? "drop-over" : ""}`} {...(mine ? drop.props : {})}>
+      <div className="mat-label">FIELD</div>
+      <div className="field-cards">
+        {units.map((c) => {
+          const gear = c.attachedGearIds.map((id) => all.get(id)).filter((g): g is CardView => !!g);
+          return (
+            <div key={c.instanceId} className="unit-stack" style={{ paddingBottom: `calc(var(--card-h) * ${0.3 * gear.length})` }}>
+              {/* Equipped Gear is tucked under its Unit with its bottom textbox showing. */}
+              {gear.map((g, i) => (
+                <div key={g.instanceId} className="gear-under" style={{ top: `calc(var(--card-h) * ${0.3 * (i + 1)})` }}>
+                  <TableCard c={g} ctx={ctx} />
+                </div>
+              ))}
+              <TableCard c={c} ctx={ctx} dragFrom={mine ? "field" : undefined} dropTarget />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Legends({ p, ctx, mine }: { p: PlayerView; ctx: BoardCtx; mine: boolean }) {
+  return (
+    <div className="mat-legends">
+      <div className="mat-label">LEGENDS</div>
+      <div className="legend-slots">
+        {zone(p, "legendArea").map((c) => (
+          <TableCard key={c.instanceId} c={c} ctx={ctx} size="sm" dragFrom={mine && !c.faceDown ? "legendArea" : undefined} dropTarget={mine && !c.faceDown} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Eddies({ p, ctx, mine }: { p: PlayerView; ctx: BoardCtx; mine: boolean }) {
+  const drop = useDrop(ctx, { kind: "eddies" });
+  const cards = zone(p, "eddieArea");
+  return (
+    <div className={`mat-eddies ${drop.over ? "drop-over" : ""}`} {...(mine ? drop.props : {})}>
+      <div className="mat-label">EDDIES</div>
+      <div className="eddie-cards">
+        {cards.map((c) => (
+          <TableCard key={c.instanceId} c={c} ctx={ctx} size="xs" />
+        ))}
+      </div>
+      <div className="eddie-count">
+        €$ <b>{p.availableEddies}</b>
+      </div>
+    </div>
+  );
+}
+
+function Piles({ seat, p, ctx }: { seat: string; p: PlayerView; ctx: BoardCtx }) {
+  const deck = zoneCount(p, "deck");
+  const trash = zone(p, "trash");
+  const top = trash.at(-1);
+  return (
+    <div className="mat-piles">
+      <div className="pile">
+        <div className="mat-label">DECK</div>
+        {deck > 0 ? (
+          <div className="pile-stack" style={{ ["--depth" as string]: Math.min(6, Math.ceil(deck / 8)) }}>
+            <CardBack size="sm" />
+          </div>
+        ) : (
+          <div className="pile-empty sm" />
+        )}
+        <div className="pile-count">{deck}</div>
+      </div>
+      <div className="pile" onClick={() => ctx.onTrash(seat)}>
+        <div className="mat-label">TRASH</div>
+        {top ? (
+          <div className="pile-stack">
+            <CardFace card={cardData(ctx.db, top)} size="sm" showText={false} />
+          </div>
+        ) : (
+          <div className="pile-empty sm" />
+        )}
+        <div className="pile-count">{trash.length}</div>
+      </div>
+    </div>
+  );
+}
+
+/** One player's mat. `rival` turns the layout 180° (Fixer on the right, piles on the left). */
+export function Mat({ seat, ctx, rival }: { seat: string; ctx: BoardCtx; rival: boolean }) {
+  const p = ctx.state.view.players[seat]!;
+  const active = ctx.state.view.activePlayerId === seat;
+  return (
+    <div className={`mat ${rival ? "rival" : "mine"} ${active ? "active" : ""}`}>
+      <Fixer p={p} ctx={ctx} />
+      <Field p={p} ctx={ctx} mine={!rival} />
+      <div className="mat-lower">
+        <Legends p={p} ctx={ctx} mine={!rival} />
+        <Eddies p={p} ctx={ctx} mine={!rival} />
+      </div>
+      <Piles seat={seat} p={p} ctx={ctx} />
+    </div>
+  );
+}
+
+export function YourHand({ ctx }: { ctx: BoardCtx }) {
+  const p = ctx.state.view.players[ctx.state.you]!;
+  return (
+    <div className="hand mine">
+      {zone(p, "hand").map((c) => (
+        <TableCard key={c.instanceId} c={c} ctx={ctx} dragFrom="hand" />
+      ))}
+    </div>
+  );
+}
+
+export function RivalHand({ ctx }: { ctx: BoardCtx }) {
+  const n = zoneCount(ctx.state.view.players[ctx.state.bot]!, "hand");
+  return (
+    <div className="hand rival" title={`${n}`}>
+      {Array.from({ length: n }, (_, i) => (
+        <div key={i} className="hand-back">
+          <CardBack size="xs" />
+        </div>
+      ))}
+      <span className="hand-count">{n}</span>
+    </div>
+  );
+}
+
+export function Strip({ children }: { children: ReactNode }) {
+  return <div className="center-strip">{children}</div>;
 }

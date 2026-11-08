@@ -64,12 +64,15 @@ async function main() {
   const strategyA = String(args["bot-a"] ?? "tactical");
   const strategyB = String(args["bot-b"] ?? "greedy");
   for (const s of [strategyA, strategyB]) if (!STRATEGIES[s]) throw new Error(`Nieznany bot ${s}`);
+  // --iters-a 200 / --iters-b 800: override the ISMCTS iteration budget per side.
+  const ismctsA = args["iters-a"] ? { iterations: Number(args["iters-a"]), timeMs: undefined } : undefined;
+  const ismctsB = args["iters-b"] ? { iterations: Number(args["iters-b"]), timeMs: undefined } : undefined;
   const games = Number(args.games ?? 10);
   const workers = Math.max(1, Math.min(Number(args.workers ?? Math.max(1, cpus().length - 1)), games));
   const seedBase = String(args.seed ?? "sim");
 
   const specs: MatchSpec[] = Array.from({ length: games }, (_, i) => ({
-    deckA, deckB, strategyA, strategyB,
+    deckA, deckB, strategyA, strategyB, ismctsA, ismctsB,
     seed: `${seedBase}-${Math.floor(i / 2)}`,
     aSeat: i % 2 === 0 ? "p1" : "p2", // paired seeds: same shuffle, swapped seats
   }));
@@ -106,16 +109,21 @@ async function main() {
   const firstSeatWins = outcomes.filter((o) => (o.winner === "A" && o.aSeat === "p1") || (o.winner === "B" && o.aSeat === "p2")).length;
   const reasons = outcomes.reduce<Record<string, number>>((acc, o) => ((acc[o.reason] = (acc[o.reason] ?? 0) + 1), acc), {});
   const avg = (f: (o: MatchOutcome) => number) => (n ? outcomes.reduce((s, o) => s + f(o), 0) / n : 0);
+  const sum = (f: (o: MatchOutcome) => number) => outcomes.reduce((s, o) => s + f(o), 0);
+  const msPerDecisionA = sum((o) => o.thinkMsA) / Math.max(1, sum((o) => o.decisionsA));
+  const msPerDecisionB = sum((o) => o.thinkMsB) / Math.max(1, sum((o) => o.decisionsB));
   const summary = {
     deckA: deckA.id, deckB: deckB.id, strategyA, strategyB, games: n, errors: errors.length,
     winsA, winsB, draws: n - winsA - winsB,
     winRateA: n ? winsA / n : 0, winRateA95: [lo, hi],
     firstPlayerWinRate: n ? firstSeatWins / n : 0,
     avgTurns: avg((o) => o.turns), avgSecondsPerGame: avg((o) => o.ms) / 1000,
+    msPerDecisionA, msPerDecisionB, rejectedCommands: sum((o) => o.rejected),
     wallSeconds: (Date.now() - t0) / 1000, reasons,
   };
   console.log(`Wynik A: ${winsA}/${n} = ${(summary.winRateA * 100).toFixed(1)}% (95%: ${(lo * 100).toFixed(0)}–${(hi * 100).toFixed(0)}%)  remisy: ${summary.draws}`);
   console.log(`Pierwszy gracz wygrywa: ${(summary.firstPlayerWinRate * 100).toFixed(0)}%   śr. tur: ${summary.avgTurns.toFixed(1)}   śr. czas gry: ${summary.avgSecondsPerGame.toFixed(1)}s   łącznie: ${summary.wallSeconds.toFixed(0)}s`);
+  console.log(`Czas decyzji: A ${msPerDecisionA.toFixed(0)} ms, B ${msPerDecisionB.toFixed(0)} ms   odrzucone komendy: ${summary.rejectedCommands}`);
   console.log(`Zakończenia:`, reasons);
   if (errors.length) console.log(`BŁĘDY (${errors.length}):\n` + errors.slice(0, 3).join("\n"));
   if (args.report) {

@@ -8,13 +8,18 @@ import {
   abilityAwareTacticalStrategy,
   type AIStrategy,
 } from "@tcg/cyberpunk-engine";
+import type { IsmctsOptions } from "./ismcts/search.ts";
 
 /**
- * Bots available today (from the vendored engine). "fair" = decides from the filtered view only
- * (no peeking at hidden cards). Our own bots (ISMCTS etc.) get registered here in stage 3.
+ * Bot registry. "fair" = decides only from what its seat has seen (no peeking at your hand or the
+ * deck order). Engine bots come from the vendored upstream engine; ISMCTS bots are ours (stage 3).
  */
 export interface BotInfo {
-  strategy: () => AIStrategy;
+  kind: "engine" | "ismcts";
+  /** Engine bots: the upstream strategy. */
+  strategy?: () => AIStrategy;
+  /** ISMCTS bots: search settings (iterations are the total, split across worker threads). */
+  ismcts?: Partial<IsmctsOptions>;
   /** Decides from the filtered view only (never sees your hand or deck order). */
   fair: boolean;
   label: string;
@@ -24,23 +29,47 @@ export interface BotInfo {
 }
 
 export const STRATEGIES: Record<string, BotInfo> = {
-  random: { strategy: () => randomStrategy, fair: true, label: "Losowy (do testów)", description: "Wykonuje losowe legalne ruchy.", inLobby: false },
-  greedy: { strategy: () => greedyStrategy, fair: true, label: "Łatwy", description: "Gra zachłannie: najlepszy ruch tu i teraz, bez planowania.", inLobby: true },
-  tactical: { strategy: () => tacticalStrategy, fair: true, label: "Średni", description: "Przeszukuje 3 ruchy w przód (minimax), nie widzi Twoich kart.", inLobby: true },
-  masterful: { strategy: () => abilityAwareTacticalStrategy, fair: true, label: "Trudny", description: "Jak Średni, plus rozumie role kart i zdolności. Nie widzi Twoich kart.", inLobby: true },
-  "expert-oracle": { strategy: () => expertOracleStrategy, fair: false, label: "Ekspert (oszukuje)", description: "Najsilniejszy z silnika, ale WIDZI Twoją rękę i kolejność talii. Do treningu pod presją.", inLobby: true },
+  random: { kind: "engine", strategy: () => randomStrategy, fair: true, label: "Random (testing)", description: "Plays random legal moves.", inLobby: false },
+  greedy: { kind: "engine", strategy: () => greedyStrategy, fair: true, label: "Easy", description: "Greedy: best move right now, no planning.", inLobby: true },
+  tactical: { kind: "engine", strategy: () => tacticalStrategy, fair: true, label: "Normal", description: "Searches 3 moves ahead. Does not see your cards.", inLobby: true },
+  masterful: { kind: "engine", strategy: () => abilityAwareTacticalStrategy, fair: true, label: "Hard", description: "Like Normal, plus card roles and abilities. Does not see your cards.", inLobby: true },
+  "ismcts-fast": {
+    kind: "ismcts",
+    ismcts: { iterations: 300, timeMs: 2500 },
+    fair: true,
+    label: "Very Hard",
+    description: "Simulates hundreds of game continuations (ISMCTS). Does not see your cards. ~1 s per move.",
+    inLobby: true,
+  },
+  ismcts: {
+    kind: "ismcts",
+    ismcts: { iterations: 1200, timeMs: 6000 },
+    fair: true,
+    label: "Master",
+    description: "Like Very Hard with 4x the simulations on all CPU cores. Does not see your cards. ~2-4 s per move.",
+    inLobby: true,
+  },
+  "expert-oracle": { kind: "engine", strategy: () => expertOracleStrategy, fair: false, label: "Expert (cheats)", description: "Sees your hand and deck order.", inLobby: true },
   "monte-carlo": {
+    kind: "engine",
     strategy: () => createMonteCarloStrategy({ rolloutsPerAction: 2, maxRolloutSteps: 30, rolloutStrategy: greedyStrategy }),
     fair: false,
-    label: "Monte Carlo (bez determinizacji)",
-    description: "Symulacje rozgrywki widzące ukryte karty.",
+    label: "Monte Carlo (sees hidden cards)",
+    description: "Rollouts that see hidden cards.",
     inLobby: false,
   },
-  mcts: { strategy: () => mctsStrategy, fair: false, label: "MCTS upstream (bez determinizacji)", description: "MCTS z silnika; widzi ukryte karty.", inLobby: false },
+  mcts: { kind: "engine", strategy: () => mctsStrategy, fair: false, label: "MCTS upstream (sees hidden cards)", description: "Engine MCTS; sees hidden cards.", inLobby: false },
 };
 
-export function getStrategy(name: string): AIStrategy {
+export function getBot(name: string): BotInfo {
   const s = STRATEGIES[name];
   if (!s) throw new Error(`Nieznany bot "${name}". Dostępne: ${Object.keys(STRATEGIES).join(", ")}`);
+  return s;
+}
+
+/** Upstream engine strategy for an engine bot (ISMCTS bots are driven by `decideBotCommand`). */
+export function getStrategy(name: string): AIStrategy {
+  const s = getBot(name);
+  if (!s.strategy) throw new Error(`Bot "${name}" nie jest strategią silnika (użyj decideBotCommand).`);
   return s.strategy();
 }

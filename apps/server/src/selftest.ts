@@ -4,13 +4,45 @@
  *   pnpm --filter @cpai/server selftest [games] [bot]
  */
 import { WebSocket } from "ws";
-import type { GameStateMessage, ServerMessage } from "@cpai/core/protocol";
+import type { GameStateMessage, Intent, ServerMessage, UiAction } from "@cpai/core/protocol";
 
 process.env.PORT ??= "5199";
 await import("./main.ts");
 const base = `http://127.0.0.1:${process.env.PORT}`;
 const nGames = Number(process.argv[2] ?? 3);
 const bot = process.argv[3] ?? "greedy";
+
+/** The gesture a player would make on the table for this action (null = no gesture for it). */
+function intentFor(a: UiAction): Intent | null {
+  const g = (k: string) => (a.args ?? {})[k] as string;
+  switch (a.move) {
+    case "playCard":
+      return { kind: "play", cardId: g("cardId"), ...(g("attachToId") ? { targetId: g("attachToId") } : {}) };
+    case "sellCard":
+      return { kind: "sell", cardId: g("cardId") };
+    case "callLegend":
+      return { kind: "call", cardId: g("legendId") };
+    case "attackUnit":
+      return { kind: "attack", cardId: g("attackerId"), targetId: g("defenderId") };
+    case "attackRival":
+      return { kind: "attack", cardId: g("attackerId"), targetId: "rival" };
+    case "useBlocker":
+      return { kind: "block", cardId: g("blockerId") };
+    case "goSolo":
+      return { kind: "goSolo", cardId: g("cardId") };
+    case "activateAbility":
+      return { kind: "activate", cardId: g("cardId") };
+    case "passPhase":
+      return { kind: "pass" };
+    case "gainGig":
+      return g("dieId") ? { kind: "select", id: g("dieId") } : null;
+    default:
+      return null;
+  }
+}
+
+let intents = 0;
+let intentOptions = 0;
 
 async function playOne(i: number) {
   const decks = (await (await fetch(`${base}/api/decks`)).json()) as { id: string; legal: boolean }[];
@@ -35,7 +67,14 @@ async function playOne(i: number) {
       const msg = JSON.parse(String(raw)) as ServerMessage;
       if (msg.type === "error") {
         errors++;
-        if (!msg.message.includes("zmienił") && !msg.message.includes("Poczekaj")) console.log(`  [${gameId}] error: ${msg.message}`);
+        if (!msg.message.includes("changed") && !msg.message.includes("not your turn")) console.log(`  [${gameId}] error: ${msg.message}`);
+        return;
+      }
+      if (msg.type === "options") {
+        // The table gesture fit several legal moves: pick one like a player would.
+        const o = msg.options[Math.floor(Math.random() * msg.options.length)]!;
+        intentOptions++;
+        ws.send(JSON.stringify({ type: "action", actionId: o.id, stateID: lastMsg!.view.stateID }));
         return;
       }
       if (msg.type !== "state") return;
@@ -53,7 +92,12 @@ async function playOne(i: number) {
         const pool = nonPass.length && Math.random() < 0.7 ? nonPass : msg.actions;
         const a = pool[Math.floor(Math.random() * pool.length)]!;
         humanMoves++;
-        ws.send(JSON.stringify({ type: "action", actionId: a.id, stateID: msg.view.stateID }));
+        // Half of the time send the table gesture (drag & drop / click) instead of the exact action.
+        const intent = Math.random() < 0.5 ? intentFor(a) : null;
+        if (intent) {
+          intents++;
+          ws.send(JSON.stringify({ type: "intent", intent, stateID: msg.view.stateID }));
+        } else ws.send(JSON.stringify({ type: "action", actionId: a.id, stateID: msg.view.stateID }));
       }
     });
     ws.on("error", reject);
@@ -74,5 +118,6 @@ for (let i = 0; i < nGames; i++) {
     console.error(`game ${i + 1} FAILED:`, (err as Error).message);
   }
 }
+console.log(`intents: ${intents} (options dialogs: ${intentOptions})`);
 console.log(failed ? `SELFTEST: ${failed} nieudanych` : "SELFTEST OK");
 process.exit(failed ? 1 : 0);

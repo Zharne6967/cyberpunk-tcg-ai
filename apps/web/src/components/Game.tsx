@@ -1,27 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CardView, ClientMessage, GameStateMessage, ServerMessage, UiAction } from "@cpai/core/protocol";
+import type { CardView, ClientMessage, GameStateMessage, Intent, ServerMessage, UiAction } from "@cpai/core/protocol";
 import { api, loadCardDb, type CardDb } from "../api.ts";
-import { PlayerSide, type BoardCtx } from "./Board.tsx";
-import { ActionPanel, Inspector, LogPanel } from "./Panels.tsx";
+import { GigArea, Mat, RivalHand, Strip, YourHand, cardData, type BoardCtx } from "./Board.tsx";
+import { ActionPanel, DecisionPanel, Inspector, LogPanel, OptionsModal, TrashModal, phaseText } from "./Panels.tsx";
 
-const REASON_PL: Record<string, string> = {
-  gig_victory: "7 Gigów na początku tury",
-  overtime_majority: "Dogrywka — większość Gigów",
-  deck_out_victory: "Rywalowi skończyła się talia",
-  deckOut: "Skończyła się talia",
-  concede: "Poddanie partii",
-  tied: "Remis",
+const RESULT_REASON: Record<string, string> = {
+  gig_victory: "Gig victory",
+  overtime_majority: "Overtime",
+  deck_out_victory: "Deck out",
+  deckOut: "Deck out",
+  concede: "Concede",
+  tied: "Tie",
 };
 
 const SPEEDS = [
-  { ms: 200, label: "Szybko" },
-  { ms: 700, label: "Normalnie" },
-  { ms: 1500, label: "Wolno" },
+  { ms: 200, label: "Fast" },
+  { ms: 700, label: "Normal" },
+  { ms: 1500, label: "Slow" },
 ];
+
+type Options = { title: string; options: { id: string; label: string }[] };
 
 function useGameSocket(gameId: string) {
   const [state, setState] = useState<GameStateMessage>();
   const [toast, setToast] = useState<string>();
+  const [options, setOptions] = useState<Options | null>(null);
   const [conn, setConn] = useState<"connecting" | "open" | "closed" | "missing">("connecting");
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -35,7 +38,10 @@ function useGameSocket(gameId: string) {
       ws.onopen = () => setConn("open");
       ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data) as ServerMessage;
-        if (msg.type === "state") setState(msg);
+        if (msg.type === "state") {
+          setState(msg);
+          setOptions(null);
+        } else if (msg.type === "options") setOptions({ title: msg.title, options: msg.options });
         else setToast(msg.message);
       };
       ws.onclose = () => {
@@ -62,15 +68,92 @@ function useGameSocket(gameId: string) {
   }, [toast]);
 
   const send = useCallback((msg: ClientMessage) => wsRef.current?.readyState === WebSocket.OPEN && wsRef.current.send(JSON.stringify(msg)), []);
-  return { state, toast, conn, send };
+  return { state, toast, options, setOptions, conn, send };
+}
+
+/** Start of the game: CR 7.5 (a random player decides who goes first) and the opening hand. */
+function SetupDialog({ state, onAction }: { state: GameStateMessage; onAction: (a: UiAction) => void }) {
+  const [botNoticeClosed, setBotNoticeClosed] = useState(false);
+  if (state.view.gamePhase !== "setup") return null;
+  const first = state.actions.filter((a) => a.move === "resolveFirstPlayer");
+  const hand = state.actions.filter((a) => a.move === "keepHand" || a.move === "mulligan");
+  const botChoice = state.log.find((l) => l.actor === "bot" && l.key === "setup.firstPlayerChoice");
+  let body: import("react").ReactNode = null;
+  if (first.length) {
+    body = (
+      <>
+        <h2>First player</h2>
+        <p>You were chosen at random. Go first or second?</p>
+        <div className="row">
+          {first.map((a) => (
+            <button key={a.id} className="btn primary" onClick={() => onAction(a)}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  } else if (botChoice && !botNoticeClosed && !hand.length) {
+    body = (
+      <>
+        <h2>First player</h2>
+        <p>The bot was chosen at random. Bot: {botChoice.text}</p>
+        <div className="row">
+          <button className="btn primary" onClick={() => setBotNoticeClosed(true)}>
+            OK
+          </button>
+        </div>
+      </>
+    );
+  } else if (hand.length) {
+    body = (
+      <>
+        <h2>Opening hand</h2>
+        {botChoice && <p className="small muted">Bot: {botChoice.text}</p>}
+        <div className="row">
+          {hand.map((a) => (
+            <button key={a.id} className={`btn ${a.move === "keepHand" ? "primary" : ""}`} onClick={() => onAction(a)}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
+  if (!body) return null;
+  return (
+    <div className="setup-overlay">
+      <div className="result setup">{body}</div>
+    </div>
+  );
+}
+
+interface MenuItem {
+  label: string;
+  run: () => void;
+}
+
+function ownerOf(s: GameStateMessage, id: string): string | undefined {
+  for (const [seat, p] of Object.entries(s.view.players))
+    for (const z of Object.values(p.zones)) if (Array.isArray(z) && z.some((c) => c.instanceId === id)) return seat;
+  return undefined;
 }
 
 export function Game({ gameId }: { gameId: string }) {
-  const { state, toast, conn, send } = useGameSocket(gameId);
+  const { state, toast, options, setOptions, conn, send } = useGameSocket(gameId);
   const [db, setDb] = useState<CardDb>();
-  const [menu, setMenu] = useState<{ card: CardView; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ card: CardView; items: MenuItem[]; x: number; y: number } | null>(null);
   const [inspect, setInspect] = useState<{ definitionId: string; live?: CardView } | null>(null);
+  const [trashSeat, setTrashSeat] = useState<string | null>(null);
+  const [targeting, setTargeting] = useState<{ attackerId: string } | null>(null);
   const [hover, setHover] = useState<string[]>([]);
+  const [hints, setHints] = useState(() => {
+    try {
+      return localStorage.getItem("cpai.hints") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [speed, setSpeed] = useState(() => {
     try {
       return Number(localStorage.getItem("cpai.speed") ?? 700);
@@ -107,45 +190,105 @@ export function Game({ gameId }: { gameId: string }) {
     },
     [send, state],
   );
-  const sendCommand = useCallback(
-    (move: string, args?: Record<string, unknown>) => state && send({ type: "command", move, args, stateID: state.view.stateID }),
+  const sendCommand = useCallback((move: string, args?: Record<string, unknown>) => state && send({ type: "command", move, args, stateID: state.view.stateID }), [send, state]);
+  const sendIntent = useCallback(
+    (intent: Intent) => {
+      if (!state) return;
+      setMenu(null);
+      setTargeting(null);
+      send({ type: "intent", intent, stateID: state.view.stateID });
+    },
     [send, state],
   );
 
-  // Enter = pass / end turn.
+  // Enter = pass, Esc = cancel.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || !state || inspect) return;
-      const pass = state.actions.find((a) => a.move === "passPhase");
-      if (pass) sendAction(pass);
+      if (!state || inspect || trashSeat) return;
+      if (e.key === "Escape") {
+        setMenu(null);
+        setTargeting(null);
+      }
+      if (e.key === "Enter" && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)) sendIntent({ kind: "pass" });
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [state, sendAction, inspect]);
+  }, [state, sendIntent, inspect, trashSeat]);
 
   if (conn === "missing")
     return (
       <div className="center-msg">
-        <p>Ta gra już nie istnieje (serwer był restartowany).</p>
+        <p>This game no longer exists (the server was restarted).</p>
         <a className="btn primary" href="#/">
-          Wróć do lobby
+          Back to lobby
         </a>
       </div>
     );
-  if (!state || !db) return <div className="center-msg">Łączenie z grą…</div>;
+  if (!state || !db) return <div className="center-msg">Connecting…</div>;
+
+  const choosing = !!state.choice && state.view.gamePhase !== "setup";
+  const view = (card: CardView) => setInspect({ definitionId: card.definitionId, live: card });
+
+  /** Generic, official table actions for a card — not filtered by legality (the engine judges). */
+  const tableMenu = (card: CardView): MenuItem[] => {
+    const items: MenuItem[] = [];
+    const data = cardData(db, card);
+    if (hints) {
+      for (const a of actionsByCard.get(card.instanceId) ?? []) items.push({ label: a.label, run: () => sendAction(a) });
+    } else if (ownerOf(state, card.instanceId) === state.you) {
+      const kw = data?.keywords ?? [];
+      if (card.zone === "hand") {
+        items.push({ label: "Play a Card", run: () => sendIntent({ kind: "play", cardId: card.instanceId }) });
+        if (data?.sellTag) items.push({ label: "Sell a Card", run: () => sendIntent({ kind: "sell", cardId: card.instanceId }) });
+        if (kw.includes("goSolo")) items.push({ label: "[GO SOLO]", run: () => sendIntent({ kind: "goSolo", cardId: card.instanceId }) });
+      } else if (card.zone === "legendArea") {
+        if (card.faceDown) items.push({ label: "Call a Legend", run: () => sendIntent({ kind: "call", cardId: card.instanceId }) });
+        else {
+          items.push({ label: "Play a Card", run: () => sendIntent({ kind: "play", cardId: card.instanceId }) });
+          items.push({ label: "Activate an Effect", run: () => sendIntent({ kind: "activate", cardId: card.instanceId }) });
+        }
+      } else if (card.zone === "field") {
+        if (card.type === "unit" || card.type === "legend") {
+          items.push({ label: "Attack", run: () => (setMenu(null), setTargeting({ attackerId: card.instanceId })) });
+          if (kw.includes("blocker")) items.push({ label: "[BLOCKER]", run: () => sendIntent({ kind: "block", cardId: card.instanceId }) });
+        }
+        items.push({ label: "Activate an Effect", run: () => sendIntent({ kind: "activate", cardId: card.instanceId }) });
+      }
+    }
+    if (data) items.push({ label: "View Card", run: () => (setMenu(null), view(card)) });
+    return items;
+  };
 
   const ctx: BoardCtx = {
     db,
     state,
+    hints,
     actionsByCard,
-    highlight: new Set([...hover, ...(menu ? [menu.card.instanceId] : [])]),
-    onCard: (card, anchor) => {
+    highlight: new Set([...hover, ...(menu ? [menu.card.instanceId] : []), ...(targeting ? [targeting.attackerId] : [])]),
+    onCardClick: (card, anchor) => {
+      if (targeting) {
+        if (ownerOf(state, card.instanceId) === state.bot && card.zone === "field") sendIntent({ kind: "attack", cardId: targeting.attackerId, targetId: card.instanceId });
+        else setTargeting(null);
+        return;
+      }
+      if (choosing) return sendIntent({ kind: "select", id: card.instanceId });
+      const items = tableMenu(card);
+      if (items.length === 1 && items[0]!.label === "View Card") return view(card);
+      if (!items.length) return;
       const r = anchor.getBoundingClientRect();
-      setMenu({ card, x: Math.min(r.left, window.innerWidth - 340), y: r.bottom + 4 });
+      setMenu({ card, items, x: Math.min(r.left, window.innerWidth - 240), y: Math.min(r.bottom + 4, window.innerHeight - 40 * items.length - 20) });
     },
-    onInspect: (card) => setInspect({ definitionId: card.definitionId, live: card }),
+    onGigAreaClick: (seat) => {
+      if (targeting && seat === state.bot) sendIntent({ kind: "attack", cardId: targeting.attackerId, targetId: "rival" });
+    },
+    onInspect: view,
+    onIntent: sendIntent,
+    onTrash: setTrashSeat,
   };
-  const menuActions = menu ? (actionsByCard.get(menu.card.instanceId) ?? []) : [];
+
+  const myPrompt = state.promptStatus === "action" || state.promptStatus === "choice";
+  const passLabel = state.view.attackState?.step === "react" ? "Pass" : "Pass Turn";
+  const trashCards = trashSeat ? ((state.view.players[trashSeat]!.zones.trash as CardView[]) ?? []) : [];
 
   return (
     <div className="game" onClick={() => menu && setMenu(null)}>
@@ -154,11 +297,26 @@ export function Game({ gameId }: { gameId: string }) {
           CYBERPUNK <span>TCG</span> // AI
         </a>
         <span className="vs">
-          {state.yourDeck} <b>vs</b> {state.botDeck}
+          {state.yourDeck} <b>vs</b> {state.botDeck} <span className="muted">({state.botLabel})</span>
         </span>
         <span className="spacer" />
-        <label className="speed">
-          Tempo bota{" "}
+        <label className="opt">
+          <input
+            type="checkbox"
+            checked={hints}
+            onChange={(e) => {
+              setHints(e.target.checked);
+              try {
+                localStorage.setItem("cpai.hints", e.target.checked ? "1" : "0");
+              } catch {
+                /* ignore */
+              }
+            }}
+          />{" "}
+          Learning mode
+        </label>
+        <label className="opt">
+          Bot speed{" "}
           <select
             value={speed}
             onChange={(e) => {
@@ -179,59 +337,90 @@ export function Game({ gameId }: { gameId: string }) {
           </select>
         </label>
         {!state.result && (
-          <button className="btn danger small" onClick={() => confirm("Na pewno poddać partię?") && send({ type: "concede" })}>
-            Poddaj
+          <button className="btn danger small" onClick={() => confirm("Concede this game?") && send({ type: "concede" })}>
+            Concede
           </button>
         )}
-        {conn !== "open" && <span className="tag warn">rozłączono — łączę ponownie…</span>}
-      </div>
-      <div className="table">
-        <div className="board">
-          <PlayerSide seat={state.bot} ctx={ctx} mine={false} />
-          <div className="midline">
-            <span>{state.view.attackState ? "⚔ trwa atak" : ""}</span>
-          </div>
-          <PlayerSide seat={state.you} ctx={ctx} mine />
-        </div>
-        <div className="sidebar">
-          <ActionPanel s={state} db={db} send={sendCommand} sendAction={sendAction} onHover={setHover} />
-          <LogPanel log={state.log} onCard={(definitionId) => setInspect({ definitionId })} />
-        </div>
+        {conn !== "open" && <span className="tag warn">Reconnecting…</span>}
       </div>
 
-      {menu && (
-        <div className="card-menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
-          <div className="card-menu-title">{menu.card.cardName ?? "Karta"}</div>
-          {menuActions.map((a) => (
-            <button key={a.id} className={`btn act g-${a.group}`} onMouseEnter={() => setHover(a.targetId ? [a.targetId] : [])} onClick={() => sendAction(a)}>
-              {a.label}
-            </button>
-          ))}
-          {menu.card.cardName && (
-            <button className="btn ghost" onClick={() => (setInspect({ definitionId: menu.card.definitionId, live: menu.card }), setMenu(null))}>
-              🔍 Szczegóły karty
-            </button>
-          )}
+      <div className="table-wrap">
+        <div className="tabletop">
+          <RivalHand ctx={ctx} />
+          <Mat seat={state.bot} ctx={ctx} rival />
+          <Strip>
+            <GigArea seat={state.bot} ctx={ctx} label="RIVAL GIGS" rival />
+            <div className={`phase-box ${state.view.activePlayerId === state.you ? "you" : "bot"}`}>
+              <div className="phase-text">
+                {phaseText(state)}
+                {state.botThinking && <span className="dots" />}
+              </div>
+              {!state.result && state.view.gamePhase !== "setup" && (
+                <button className="btn primary pass" disabled={!myPrompt || choosing} onClick={() => sendIntent({ kind: "pass" })}>
+                  {passLabel}
+                </button>
+              )}
+            </div>
+            <GigArea seat={state.you} ctx={ctx} label="FRIENDLY GIGS" rival={false} />
+          </Strip>
+          <Mat seat={state.you} ctx={ctx} rival={false} />
+          <YourHand ctx={ctx} />
+        </div>
+        <aside className="sidebar">
+          <LogPanel log={state.log} onCard={(definitionId) => setInspect({ definitionId })} />
+          <DecisionPanel s={state} db={db} send={sendCommand} sendAction={sendAction} />
+          {hints && <ActionPanel s={state} sendAction={sendAction} onHover={setHover} />}
+        </aside>
+      </div>
+
+      {targeting && (
+        <div className="targeting-bar">
+          Attack target{" "}
+          <button className="btn small" onClick={() => setTargeting(null)}>
+            Cancel
+          </button>
         </div>
       )}
+      {menu && (
+        <div className="card-menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
+          <div className="card-menu-title">{menu.card.cardName ?? (menu.card.zone === "legendArea" ? "Legend" : "Card")}</div>
+          {menu.items.map((it) => (
+            <button key={it.label} className="btn act" onClick={it.run}>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {options && (
+        <OptionsModal
+          title={options.title}
+          options={options.options}
+          onPick={(id) => {
+            setOptions(null);
+            send({ type: "action", actionId: id, stateID: state.view.stateID });
+          }}
+          onClose={() => setOptions(null)}
+        />
+      )}
+      {trashSeat && <TrashModal db={db} cards={trashCards} title={trashSeat === state.you ? "Your trash" : "Rival trash"} onInspect={view} onClose={() => setTrashSeat(null)} />}
       {inspect && <Inspector db={db} definitionId={inspect.definitionId} live={inspect.live} onClose={() => setInspect(null)} />}
       {toast && <div className="toast">{toast}</div>}
+      {!state.result && <SetupDialog state={state} onAction={sendAction} />}
       {state.result && !hideResult && (
         <div className="result-overlay">
           <div className={`result ${state.result.winner}`}>
-            <h2>{state.result.winner === "you" ? "WYGRAŁEŚ" : state.result.winner === "bot" ? "PRZEGRAŁEŚ" : "REMIS"}</h2>
+            <h2>{state.result.winner === "you" ? "YOU WIN" : state.result.winner === "bot" ? "YOU LOSE" : "DRAW"}</h2>
             <p>
-              {REASON_PL[state.result.reason ?? ""] ?? state.result.reason ?? ""} · tura {state.view.turnNumber}
+              {RESULT_REASON[state.result.reason ?? ""] ?? state.result.reason ?? ""} · Turn {state.view.turnNumber}
             </p>
             <div className="row">
               <a className="btn primary" href="#/">
-                Nowa partia
+                New game
               </a>
               <button className="btn" onClick={() => setHideResult(true)}>
-                Zobacz stół
+                View table
               </button>
             </div>
-            <p className="small muted">Partia zapisana w var/games — bot będzie się z niej uczył w etapie 4.</p>
           </div>
         </div>
       )}

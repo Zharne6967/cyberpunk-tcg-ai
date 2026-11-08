@@ -199,6 +199,43 @@ export function processCommand(
   return result;
 }
 
+/**
+ * cyberpunk-tcg-ai local patch: the same rules path as {@link processCommand} for search
+ * simulations — no undo patches, move logs, animation script or clock bookkeeping. Returns the next
+ * state, or null when the command is rejected. Never use it for the authoritative game.
+ */
+export function processCommandLean(
+  state: MatchState,
+  command: CommandEnvelope,
+  playerId: PlayerId,
+): MatchState | null {
+  const move = moveRegistry[command.move];
+  if (!move) return null;
+  if (state.G.turnMetadata.pendingChoice && !move.handlesPendingChoice) return null;
+  const input = command.input ?? { args: {} };
+  if (move.validate && !move.validate({ state, playerId, input }).valid) return null;
+  const events: import("../types/game-events.ts").GameEvent[] = [];
+  const logs: MoveLog[] = [];
+  return create(state, (draft) => {
+    const ops = createOperations(draft.G, events, logs);
+    move.execute({ state: draft as MatchState, playerId, input, operations: ops });
+    recomputeActiveEffects(draft as MatchState);
+    for (let steps = 0; ; steps++) {
+      const actor = automaticCombatActor(draft as MatchState);
+      if (!actor) break;
+      if (steps >= 32) throw new Error("Combat failed to reach a decision boundary");
+      resolveAttackMove.execute({
+        state: draft as MatchState,
+        playerId: actor,
+        input: { args: { pass: true } },
+        operations: ops,
+      });
+      recomputeActiveEffects(draft as MatchState);
+    }
+    draft.ctx.stateID++;
+  }) as MatchState;
+}
+
 function applyDynamicClockAfterCommand(input: {
   state: MatchState;
   actorId: PlayerId;

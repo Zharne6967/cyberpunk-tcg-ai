@@ -1,11 +1,13 @@
 import { useState } from "react";
 import type { CardData } from "../api.ts";
-import { TYPE_PL } from "../api.ts";
+import { TYPE_NAME } from "../api.ts";
+
+export type CardSize = "xs" | "sm" | "md" | "lg";
 
 /** Renders official art when available (cached by the server), otherwise a text card in the card's colour. */
-export function CardFace({ card, size = "md", showText = true }: { card: CardData | undefined; size?: "sm" | "md" | "lg"; showText?: boolean }) {
+export function CardFace({ card, size = "md", showText = true }: { card: CardData | undefined; size?: CardSize; showText?: boolean }) {
   const [imgOk, setImgOk] = useState(true);
-  if (!card) return <div className={`card-face back ${size}`} />;
+  if (!card) return <CardBack size={size} />;
   if (imgOk) {
     return (
       <div className={`card-face img ${size} c-${card.color}`}>
@@ -21,7 +23,7 @@ export function CardFace({ card, size = "md", showText = true }: { card: CardDat
       </div>
       {card.subtitle && <div className="cf-sub">{card.subtitle}</div>}
       <div className="cf-type">
-        {TYPE_PL[card.type]}
+        {TYPE_NAME[card.type]}
         {card.tags.length ? ` — ${card.tags.join(", ")}` : ""}
       </div>
       {showText && <div className="cf-text">{card.text}</div>}
@@ -34,10 +36,14 @@ export function CardFace({ card, size = "md", showText = true }: { card: CardDat
   );
 }
 
-export function CardBack({ size = "md", label }: { size?: "sm" | "md" | "lg"; label?: string }) {
+/**
+ * Card back (our own design, not the official artwork). Legends have a different back than deck
+ * cards — CR 3.4.1: a face-down card still shows whether it is a Legend.
+ */
+export function CardBack({ size = "md", kind = "deck" }: { size?: CardSize; kind?: "deck" | "legend" }) {
   return (
-    <div className={`card-face back ${size}`}>
-      <span>{label ?? ""}</span>
+    <div className={`card-face back back-${kind} ${size}`}>
+      <span className="back-mark">{kind === "legend" ? "LEGEND" : "CYBERPUNK"}</span>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { STRATEGIES } from "@cpai/ai";
 import type { BotSummary, ClientMessage, NewGameRequest } from "@cpai/core/protocol";
 import { getDeck, loadAllDecks, summarizeDeck } from "./decks.ts";
+import { botPool } from "./bot-pool.ts";
 import { GameSession, games } from "./game.ts";
 import { getCardImage } from "./images.ts";
 import { DATA_DIR, WEB_DIST } from "./paths.ts";
@@ -39,7 +40,7 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 function serveStatic(req: IncomingMessage, res: ServerResponse) {
   if (!existsSync(WEB_DIST)) {
     res.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
-    res.end("Interfejs nie jest zbudowany. Uruchom: pnpm build  (albo start.bat)");
+    res.end("UI is not built. Run: pnpm build (or start.bat)");
     return;
   }
   const url = new URL(req.url ?? "/", "http://x");
@@ -68,7 +69,7 @@ const server = createServer(async (req, res) => {
     if (p === "/api/decks" && req.method === "GET") return sendJson(res, 200, loadAllDecks().map(summarizeDeck).sort((a, b) => a.name.localeCompare(b.name)));
     if (p.startsWith("/api/decks/") && req.method === "GET") {
       const deck = getDeck(decodeURIComponent(p.slice("/api/decks/".length)));
-      return deck ? sendJson(res, 200, deck) : sendJson(res, 404, { error: "Nie ma takiej talii" });
+      return deck ? sendJson(res, 200, deck) : sendJson(res, 404, { error: "Deck not found" });
     }
     if (p === "/api/bots") {
       const bots: BotSummary[] = Object.entries(STRATEGIES)
@@ -80,14 +81,14 @@ const server = createServer(async (req, res) => {
       const body = (await readBody(req)) as NewGameRequest;
       const you = getDeck(body.yourDeck);
       const bot = getDeck(body.botDeck);
-      if (!you || !bot) return sendJson(res, 400, { error: "Wybierz obie talie" });
+      if (!you || !bot) return sendJson(res, 400, { error: "Choose both decks" });
       const game = new GameSession(you, bot, body.bot ?? "tactical", body.seed);
       games.set(game.id, game);
       return sendJson(res, 200, { gameId: game.id });
     }
     if (p.startsWith("/api/games/") && req.method === "GET") {
       const g = games.get(p.slice("/api/games/".length));
-      return g ? sendJson(res, 200, { gameId: g.id }) : sendJson(res, 404, { error: "Gra nie istnieje (serwer był restartowany?)" });
+      return g ? sendJson(res, 200, { gameId: g.id }) : sendJson(res, 404, { error: "Game not found (was the server restarted?)" });
     }
     if (p.startsWith("/img/")) {
       const key = decodeURIComponent(p.slice(5)).replace(/\.webp$/, "");
@@ -99,7 +100,7 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, { "content-type": "image/webp", "cache-control": "public, max-age=604800" });
       return res.end(img);
     }
-    if (p.startsWith("/api/")) return sendJson(res, 404, { error: "Nieznany adres API" });
+    if (p.startsWith("/api/")) return sendJson(res, 404, { error: "Unknown API path" });
     return serveStatic(req, res);
   } catch (err) {
     console.error(err);
@@ -126,6 +127,7 @@ server.on("upgrade", (req, socket, head) => {
       }
       if (msg.type === "action") game.handleAction(msg.actionId, msg.stateID);
       else if (msg.type === "command") game.handleCommand(msg.move, msg.args, msg.stateID);
+      else if (msg.type === "intent") game.handleIntent(msg.intent, msg.stateID);
       else if (msg.type === "setBotSpeed") game.botDelayMs = Math.max(0, Math.min(5000, Number(msg.ms) || 0));
       else if (msg.type === "concede") game.concede();
     });
@@ -133,6 +135,7 @@ server.on("upgrade", (req, socket, head) => {
   });
 });
 
+botPool.warmUp();
 server.listen(PORT, HOST, () => {
-  console.log(`\n  Cyberpunk TCG AI działa:  http://localhost:${PORT}\n  (zamknij to okno, aby zatrzymać serwer)\n`);
+  console.log(`\n  Cyberpunk TCG AI is running:  http://localhost:${PORT}\n  (close this window to stop the server)\n`);
 });

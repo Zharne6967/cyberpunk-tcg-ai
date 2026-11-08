@@ -1,5 +1,6 @@
 export {
   processCommand,
+  processCommandLean,
   validateCommand,
   enumerateMoves,
   registerMove,

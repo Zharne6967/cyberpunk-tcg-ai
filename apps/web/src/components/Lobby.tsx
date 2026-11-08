@@ -27,8 +27,8 @@ function DeckList({ decks, db, value, onChange, allowRandom }: { decks: DeckSumm
     <div className="deck-list">
       {allowRandom && (
         <button className={`deck-row ${value === "__random" ? "sel" : ""}`} onClick={() => onChange("__random")}>
-          <span className="deck-name">🎲 Losowa talia</span>
-          <span className="deck-meta">bot wylosuje jedną z legalnych talii</span>
+          <span className="deck-name">🎲 Random deck</span>
+          <span className="deck-meta">a random legal deck</span>
         </button>
       )}
       {decks.map((d) => (
@@ -37,7 +37,7 @@ function DeckList({ decks, db, value, onChange, allowRandom }: { decks: DeckSumm
             <ColorDots colors={d.colors} /> {d.name}
           </span>
           <span className="deck-meta">
-            {d.legends.map((s) => db?.bySlug.get(s)?.displayName ?? s).join(" · ")} — {d.size} kart
+            {d.legends.map((s) => db?.bySlug.get(s)?.displayName ?? s).join(" · ")} — {d.size} cards
             {d.source?.kind ? ` · ${d.source.kind}` : ""}
           </span>
         </button>
@@ -88,34 +88,34 @@ export function Lobby() {
         <h1>
           CYBERPUNK <span>TCG</span> // AI
         </h1>
-        <p>Lokalny rywal do treningu. Wybierz talię, talię bota i poziom — gra startuje od razu, bez kolejki.</p>
+        <p>Choose your deck, the bot's deck and the bot level.</p>
       </header>
       {error && <div className="banner error">{error}</div>}
       <div className="lobby-grid">
         <section className="panel">
-          <h2>Twoja talia</h2>
+          <h2>Your deck</h2>
           <DeckList decks={decks} db={db} value={yourDeck} onChange={setYourDeck} />
         </section>
         <section className="panel">
-          <h2>Talia bota</h2>
+          <h2>Bot deck</h2>
           <DeckList decks={decks} db={db} value={botDeck} onChange={setBotDeck} allowRandom />
         </section>
         <section className="panel">
-          <h2>Poziom bota</h2>
+          <h2>Bot level</h2>
           <div className="bot-list">
             {bots.map((b) => (
               <button key={b.id} className={`bot-row ${bot === b.id ? "sel" : ""}`} onClick={() => setBot(b.id)}>
                 <span className="bot-name">
-                  {b.label} {!b.fair && <em className="tag warn">widzi Twoje karty</em>}
+                  {b.label} {!b.fair && <em className="tag warn">sees your cards</em>}
                 </span>
                 <span className="bot-desc">{b.description}</span>
               </button>
             ))}
           </div>
           <button className="btn primary big" disabled={busy || !decks.length} onClick={start}>
-            {busy ? "Startuję…" : "▶ Graj"}
+            {busy ? "Starting…" : "▶ Play"}
           </button>
-          <p className="hint">Silniejszy, uczciwy i uczący się bot pojawi się w kolejnym etapie.</p>
+          
         </section>
       </div>
     </div>

@@ -289,9 +289,10 @@ describe("CR real-card: gig adjust/swap, spend-icon, hidden areas", () => {
       faceDown: boolean;
     }[];
     expect(rivalLegends.every((c) => c.faceDown && c.cardName === null)).toBe(true);
+    // cyberpunk-tcg-ai local patch: CR 5.7.4.1 — the owner cannot look at own face-down Legends either.
     const ownLegends = p1View.players[P1 as string]!.zones.legendArea;
-    if (!Array.isArray(ownLegends)) throw new Error("own Legends must be visible to owner");
-    expect(ownLegends.some((card) => card.color === welcomeToNightCityRetailVStreetkid.color)).toBe(
+    if (!Array.isArray(ownLegends)) throw new Error("own Legend slots must be listed");
+    expect(ownLegends.every((card) => card.faceDown && card.cardName === null && card.color == null)).toBe(
       true,
     );
     expect(rivalLegends.every((card) => (card as { color?: string | null }).color == null)).toBe(

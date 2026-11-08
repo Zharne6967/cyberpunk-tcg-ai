@@ -1,55 +1,57 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CardView, GameStateMessage, LogLine, UiAction } from "@cpai/core/protocol";
-import { COLOR_PL, TYPE_PL, type CardDb } from "../api.ts";
+import { COLOR_NAME, TYPE_NAME, type CardDb } from "../api.ts";
 import { CardFace } from "./CardFace.tsx";
 import { cardData } from "./Board.tsx";
 
 type Send = (move: string, args?: Record<string, unknown>) => void;
 
-const GROUP_PL: Record<string, string> = {
-  setup: "Przygotowanie",
-  play: "Zagraj kartę",
-  sell: "Sprzedaj (Eddie)",
-  legend: "Legendy",
-  attack: "Atak",
-  react: "Reakcja",
-  ability: "Zdolności",
-  choice: "Wybór",
-  phase: "Tura",
-  other: "Inne",
+const GROUP_NAME: Record<string, string> = {
+  setup: "Setup",
+  play: "Play a Card",
+  sell: "Sell a Card",
+  legend: "Call a Legend",
+  attack: "Attack",
+  react: "React",
+  ability: "Activate an Effect",
+  choice: "Choice",
+  phase: "Turn",
+  other: "Other",
 };
 
-const CHOICE_PL: Record<string, string> = {
-  chooseFirstPlayer: "Kto zaczyna partię?",
-  gainGig: "Wybierz kość Gig z Fixera",
-  chooseTarget: "Wybierz cel efektu",
-  chooseEffect: "Wybierz jedną z opcji",
-  chooseTrigger: "Wybierz, który efekt rozpatrzyć",
-  chooseGigsToSteal: "Wybierz Gigi do kradzieży",
-  preventGigSteal: "Rywal kradnie Twoje Gigi — możesz zapobiec",
-  scry: "Rozdziel odkryte karty",
-  revealDestination: "Gdzie trafia odkryta karta?",
-  chooseCardToPlay: "Wybierz kartę do zagrania",
-  chooseCardToMove: "Wybierz kartę",
-  chooseCardType: "Wybierz typ karty",
-  redirectDefeat: "Uratować jednostkę przed pokonaniem?",
-  chooseSacrificialGear: "Wybierz Gear do poświęcenia",
+export const CHOICE_TITLE: Record<string, string> = {
+  chooseFirstPlayer: "Go first or second",
+  gainGig: "Gain a Gig",
+  chooseTarget: "Choose a target",
+  chooseEffect: "Choose one",
+  chooseTrigger: "Pending effects",
+  chooseGigsToSteal: "Steal",
+  preventGigSteal: "Prevent steal",
+  scry: "Search",
+  revealDestination: "Reveal",
+  chooseCardToPlay: "Play a Card",
+  chooseCardToMove: "Choose a card",
+  chooseCardType: "Choose a card type",
+  redirectDefeat: "Replacement effect",
+  chooseSacrificialGear: "Choose a Gear",
 };
 
-function describeTurn(s: GameStateMessage): string {
+/** "Turn 3 · Your Main Phase", "React Step"… (official phase/step names). */
+export function phaseText(s: GameStateMessage): string {
   const v = s.view;
-  const mine = v.activePlayerId === s.you;
-  if (s.result) return "Koniec gry";
-  if (v.gamePhase === "setup") return "Przygotowanie partii";
+  if (s.result) return "Game over";
+  if (v.gamePhase === "setup") return "Setup";
+  const whose = v.activePlayerId === s.you ? "Your" : "Rival's";
   const att = v.attackState;
   if (att) {
-    const step: Record<string, string> = { attack: "deklaracja ataku", react: "reakcje", fight: "walka", fightResult: "wynik walki", steal: "kradzież" };
-    return `${mine ? "Twój atak" : "Atak bota"} — ${step[att.step] ?? att.step}`;
+    const step: Record<string, string> = { attack: "Attack", react: "React Step", fight: "Fight Step", fightResult: "Fight Step", steal: "Steal Step" };
+    return `Turn ${v.turnNumber} · ${step[att.step] ?? att.step}`;
   }
-  return `Tura ${v.turnNumber} · ${mine ? "Twoja" : "bota"} · faza ${v.gamePhase === "main" ? "główna" : v.gamePhase}${v.overtimeActive ? " · DOGRYWKA" : ""}`;
+  const phase = v.gamePhase === "main" ? "Main Phase" : v.gamePhase === "start" ? "Start Phase" : v.gamePhase === "end" ? "End Phase" : v.gamePhase;
+  return `Turn ${v.turnNumber} · ${whose} ${phase}${v.overtimeActive ? " · Overtime" : ""}`;
 }
 
-/** Better labels for choice actions that need the choice payload (effect options, trigger texts, card types). */
+/** Labels for choice actions that need the choice payload (effect options, trigger texts). */
 function choiceLabel(a: UiAction, s: GameStateMessage): string {
   const p = (s.choice?.payload ?? {}) as Record<string, unknown>;
   const args = a.args ?? {};
@@ -61,17 +63,43 @@ function choiceLabel(a: UiAction, s: GameStateMessage): string {
     const opt = (p.options as { triggerId: string; cardName: string; abilityText: string }[] | undefined)?.find((o) => o.triggerId === args.triggerId);
     if (opt) return `${opt.cardName}: ${opt.abilityText}`;
   }
-  if (a.move === "resolveCardTypeChoice") return `Typ: ${TYPE_PL[String(args.cardType)] ?? String(args.cardType)}`;
   return a.label;
 }
 
-export function ActionPanel({ s, db, send, sendAction, onHover }: { s: GameStateMessage; db: CardDb; send: Send; sendAction: (a: UiAction) => void; onHover: (ids: string[]) => void }) {
-  const yourTurn = s.promptStatus === "action" || s.promptStatus === "choice";
+/** The decision the rules ask you to make right now (targets, pending effects, Gig choices…). */
+export function DecisionPanel({ s, db, send, sendAction }: { s: GameStateMessage; db: CardDb; send: Send; sendAction: (a: UiAction) => void }) {
+  const choice = s.choice;
+  if (!choice || s.view.gamePhase === "setup") return null;
+  const source = (choice.payload as { source?: { displayName?: string; rulesText?: string } } | undefined)?.source;
+  const acts = s.actions.filter((a) => a.group === "choice" || a.move === "gainGig");
+  return (
+    <div className="panel decision-panel">
+      <div className="decision-title">{CHOICE_TITLE[choice.type] ?? choice.type}</div>
+      {source?.displayName && (
+        <div className="choice-src">
+          <b>{source.displayName}</b>
+          {source.rulesText ? <div className="small">{source.rulesText}</div> : null}
+        </div>
+      )}
+      {choice.type === "scry" && <ScryPicker s={s} db={db} send={send} />}
+      {choice.type === "preventGigSteal" && <PreventStealPicker s={s} send={send} />}
+      <div className="decision-buttons">
+        {acts.map((a) => (
+          <button key={a.id} className="btn act" onClick={() => sendAction(a)}>
+            {choiceLabel(a, s)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Learning mode only: every legal action, grouped. */
+export function ActionPanel({ s, sendAction, onHover }: { s: GameStateMessage; sendAction: (a: UiAction) => void; onHover: (ids: string[]) => void }) {
   const groups = useMemo(() => {
-    // Two copies of the same card give identical options — show one button with a ×N counter.
     const m = new Map<string, { a: UiAction; n: number }[]>();
     for (const a of s.actions) {
-      if (a.move === "passPhase") continue;
+      if (a.move === "passPhase" || a.group === "choice") continue;
       const g = m.get(a.group) ?? [];
       const dup = g.find((x) => x.a.label === a.label && (a.group === "play" || a.group === "sell"));
       if (dup) dup.n++;
@@ -80,31 +108,16 @@ export function ActionPanel({ s, db, send, sendAction, onHover }: { s: GameState
     }
     return [...m.entries()];
   }, [s.actions]);
-  const pass = s.actions.find((a) => a.move === "passPhase");
-  const choice = s.choice;
-  const source = (choice?.payload as { source?: { displayName?: string; rulesText?: string } } | undefined)?.source;
-
   return (
     <div className="panel actions-panel">
-      <div className={`turn-banner ${yourTurn ? "you" : "bot"}`}>{describeTurn(s)}</div>
-      {s.botThinking && <div className="thinking">Bot myśli<span className="dots" /></div>}
-      {!yourTurn && !s.botThinking && !s.result && <div className="muted">Czekaj na ruch rywala…</div>}
-      {choice && (
-        <div className="choice-box">
-          <div className="choice-title">{CHOICE_PL[choice.type] ?? choice.type}</div>
-          {source?.displayName && (
-            <div className="choice-src">
-              <b>{source.displayName}</b>
-              {source.rulesText ? <div className="small">{source.rulesText}</div> : null}
-            </div>
-          )}
-          {choice.type === "scry" && <ScryPicker s={s} db={db} send={send} />}
-          {choice.type === "preventGigSteal" && <PreventStealPicker s={s} send={send} />}
+      {s.botInfo && (
+        <div className="small muted">
+          Bot: {s.botInfo.iterations} simulations, {(s.botInfo.ms / 1000).toFixed(1)} s, {Math.round(s.botInfo.winRate * 100)}%
         </div>
       )}
       {groups.map(([group, acts]) => (
         <div key={group} className="act-group">
-          <div className="act-group-title">{GROUP_PL[group] ?? group}</div>
+          <div className="act-group-title">{GROUP_NAME[group] ?? group}</div>
           {acts.map(({ a, n }) => (
             <button
               key={a.id}
@@ -113,20 +126,17 @@ export function ActionPanel({ s, db, send, sendAction, onHover }: { s: GameState
               onMouseEnter={() => onHover([a.cardId, a.targetId].filter((x): x is string => !!x))}
               onMouseLeave={() => onHover([])}
             >
-              {a.group === "choice" ? choiceLabel(a, s) : a.label}
+              {a.label}
               {n > 1 && <span className="mult"> ×{n}</span>}
             </button>
           ))}
         </div>
       ))}
-      {pass && (
-        <button className="btn primary pass" onClick={() => sendAction(pass)}>
-          {pass.label} ⏎
-        </button>
-      )}
     </div>
   );
 }
+
+const ZONE_NAME: Record<string, string> = { hand: "Hand", trash: "Trash", deckTop: "Top of deck", deckBottom: "Bottom of deck", field: "Field", eddieArea: "Eddies" };
 
 function ScryPicker({ s, db, send }: { s: GameStateMessage; db: CardDb; send: Send }) {
   const p = s.choice!.payload as {
@@ -136,7 +146,6 @@ function ScryPicker({ s, db, send }: { s: GameStateMessage; db: CardDb; send: Se
   const pickable = p.destinations.filter((d) => !d.remainder);
   const remainder = p.destinations.find((d) => d.remainder);
   const [assign, setAssign] = useState<Record<string, string>>({});
-  const ZONE_PL: Record<string, string> = { hand: "na rękę", trash: "do kosza", deckTop: "na wierzch talii", deckBottom: "pod spód talii", field: "na pole", eddieArea: "jako Eddie" };
   const submit = () => {
     const destinations = pickable.map((d) => ({ zone: d.zone, cardIds: Object.entries(assign).filter(([, z]) => z === d.zone).map(([id]) => id) }));
     if (remainder) destinations.push({ zone: remainder.zone, cardIds: p.revealedCards.map((c) => c.instanceId).filter((id) => !assign[id]) });
@@ -154,11 +163,10 @@ function ScryPicker({ s, db, send }: { s: GameStateMessage; db: CardDb; send: Se
             <div>
               <div>{c.cardName}</div>
               <select value={assign[c.instanceId] ?? ""} onChange={(e) => setAssign({ ...assign, [c.instanceId]: e.target.value })}>
-                <option value="">{remainder ? `(reszta: ${ZONE_PL[remainder.zone] ?? remainder.zone})` : "—"}</option>
+                <option value="">{remainder ? ZONE_NAME[remainder.zone] ?? remainder.zone : "—"}</option>
                 {opts.map((d) => (
                   <option key={d.zone} value={d.zone}>
-                    {ZONE_PL[d.zone] ?? d.zone}
-                    {d.max != null ? ` (max ${d.max})` : ""}
+                    {ZONE_NAME[d.zone] ?? d.zone}
                   </option>
                 ))}
               </select>
@@ -166,13 +174,8 @@ function ScryPicker({ s, db, send }: { s: GameStateMessage; db: CardDb; send: Se
           </div>
         );
       })}
-      {pickable.map((d) => (
-        <div key={d.zone} className="small muted">
-          {ZONE_PL[d.zone] ?? d.zone}: {d.eligibilityLabel} {d.min != null ? `min ${d.min}` : ""} {d.max != null ? `max ${d.max}` : ""}
-        </div>
-      ))}
       <button className="btn primary" onClick={submit}>
-        Zatwierdź
+        Confirm
       </button>
     </div>
   );
@@ -186,17 +189,16 @@ function PreventStealPicker({ s, send }: { s: GameStateMessage; send: Send }) {
   const used = new Set(Object.values(pairs));
   return (
     <div className="prevent">
-      <div className="small">Możesz odrzucić z ręki kartę o koszcie równym wartości Giga, aby go ochronić.</div>
       {p.stealEntries.map((e) => (
         <div key={e.dieId} className="prevent-row">
-          Gig o wartości <b>{e.value}</b>:{" "}
+          Gig <b>{e.value}</b>:{" "}
           <select value={pairs[e.dieId] ?? ""} onChange={(ev) => setPairs({ ...pairs, [e.dieId]: ev.target.value })}>
-            <option value="">nie chroń</option>
+            <option value="">—</option>
             {p.handEntries
               .filter((h) => h.cost === e.value && (!used.has(h.cardId) || pairs[e.dieId] === h.cardId))
               .map((h) => (
                 <option key={h.cardId} value={h.cardId}>
-                  odrzuć {nameOf(h.cardId)}
+                  {nameOf(h.cardId)}
                 </option>
               ))}
           </select>
@@ -209,7 +211,7 @@ function PreventStealPicker({ s, send }: { s: GameStateMessage; send: Send }) {
           send("resolvePreventGigSteal", preventions.length ? { preventions } : { pass: true, preventions: [] });
         }}
       >
-        Zatwierdź
+        Confirm
       </button>
     </div>
   );
@@ -222,15 +224,15 @@ export function LogPanel({ log, onCard }: { log: LogLine[]; onCard: (definitionI
   }, [log.length]);
   return (
     <div className="panel log-panel">
-      <h3>Log partii</h3>
+      <h3>Log</h3>
       <div className="log" ref={ref}>
         {log.map((l) => (
           <div key={l.seq} className={`log-line ${l.actor}`}>
-            <span className="log-who">{l.actor === "you" ? "Ty" : l.actor === "bot" ? "Bot" : "•"}</span>
+            <span className="log-who">{l.actor === "you" ? "You" : l.actor === "bot" ? "Bot" : "•"}</span>
             <span className="log-text">
               {l.text}
               {l.cards.map((c) => (
-                <button key={c.instanceId} className="log-card" title="Pokaż kartę" onClick={() => onCard(c.definitionId)}>
+                <button key={c.instanceId} className="log-card" onClick={() => onCard(c.definitionId)}>
                   🔍
                 </button>
               ))}
@@ -259,21 +261,19 @@ export function Inspector({ db, definitionId, live, onClose }: { db: CardDb; def
         <div className="insp-body">
           <h2>{card.displayName}</h2>
           <div className="insp-meta">
-            <span className={`pill c-${card.color}`}>{COLOR_PL[card.color]}</span>
-            <span className="pill">{TYPE_PL[card.type]}</span>
-            {card.cost != null && <span className="pill">Koszt {card.cost} €$</span>}
-            {card.power != null && card.type !== "program" && <span className="pill">Siła {card.power}</span>}
+            <span className={`pill c-${card.color}`}>{COLOR_NAME[card.color]}</span>
+            <span className="pill">{TYPE_NAME[card.type]}</span>
+            {card.cost != null && <span className="pill">Cost {card.cost} €$</span>}
+            {card.power != null && card.type !== "program" && <span className="pill">Power {card.power}</span>}
             {card.ram != null && <span className="pill">RAM {card.ram}</span>}
             {card.sellTag && <span className="pill">Sell Tag €$</span>}
           </div>
-          {card.tags.length > 0 && <div className="small">Tagi: {card.tags.join(", ")}</div>}
+          {card.tags.length > 0 && <div className="small">{card.tags.join(", ")}</div>}
           <p className="insp-text">{card.text}</p>
           {live && live.zone === "field" && (
             <div className="insp-live">
-              <b>Na stole:</b> siła {live.effectivePower}
-              {live.effectivePower !== live.power ? ` (bazowo ${live.power})` : ""}
-              {live.spent ? " · zużyta (spent)" : ""}
-              {live.hasLag ? " · LAG (nie może atakować w tej turze)" : ""}
+              Power {live.effectivePower}
+              {live.spent ? " · Spent" : " · Ready"}
               {live.activeEffects.map((e) => (
                 <div key={e.id} className={`fx-line ${e.tone}`}>
                   {e.sourceName}: {e.label} {e.durationLabel ? `(${e.durationLabel})` : ""}
@@ -283,11 +283,11 @@ export function Inspector({ db, definitionId, live, onClose }: { db: CardDb; def
           )}
           {card.rulings.length > 0 && (
             <div className="rulings">
-              <h4>Oficjalne FAQ ({card.rulings.length})</h4>
+              <h4>Official rulings ({card.rulings.length})</h4>
               {card.rulings.map((r, i) => (
                 <div key={i} className="ruling">
-                  {r.question && <div className="q">P: {r.question}</div>}
-                  <div className="a">O: {r.answer}</div>
+                  {r.question && <div className="q">Q: {r.question}</div>}
+                  <div className="a">A: {r.answer}</div>
                 </div>
               ))}
             </div>
@@ -296,9 +296,56 @@ export function Inspector({ db, definitionId, live, onClose }: { db: CardDb; def
             {card.set.name} · #{card.printNumber} · {card.rarity}
           </div>
           <button className="btn" onClick={onClose}>
-            Zamknij (Esc)
+            Close
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Trash is a public area (CR 5.9.2/5.9.3): either player may view its contents and order. */
+export function TrashModal({ db, cards, title, onInspect, onClose }: { db: CardDb; cards: CardView[]; title: string; onInspect: (c: CardView) => void; onClose: () => void }) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal trash-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>
+          {title} ({cards.length})
+        </h3>
+        <div className="trash-grid">
+          {[...cards].reverse().map((c) => (
+            <button key={c.instanceId} className="trash-card" onClick={() => onInspect(c)}>
+              <CardFace card={cardData(db, c)} size="sm" showText={false} />
+            </button>
+          ))}
+        </div>
+        <button className="btn" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Server asked to disambiguate a table gesture (several abilities, several Gear hosts…). */
+export function OptionsModal({ title, options, onPick, onClose }: { title: string; options: { id: string; label: string }[]; onPick: (id: string) => void; onClose: () => void }) {
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal options-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>{title}</h3>
+        {options.map((o) => (
+          <button key={o.id} className="btn act" onClick={() => onPick(o.id)}>
+            {o.label}
+          </button>
+        ))}
+        <button className="btn ghost" onClick={onClose}>
+          Cancel
+        </button>
       </div>
     </div>
   );

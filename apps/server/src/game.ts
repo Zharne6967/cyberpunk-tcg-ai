@@ -14,55 +14,14 @@ import {
   type GameEvent,
   type PlayerId,
 } from "@tcg/cyberpunk-engine";
-import { STRATEGIES, decideBotCommand } from "@cpai/ai";
+import { KnowledgeTracker, STRATEGIES, decideBotCommand, expandAtomicGigAdjust } from "@cpai/ai";
 import { getCatalog, toEngineDeckList, type Deck } from "@cpai/core";
-import type { GameStateMessage, LogLine, MatchView, ServerMessage, UiAction } from "@cpai/core/protocol";
-import { BotWorker } from "./bot-pool.ts";
-import { LOG_MESSAGES, LOG_MESSAGES_EN, buildNameIndex, labelAction } from "./labels.ts";
+import type { GameStateMessage, Intent, LogLine, MatchView, ServerMessage, UiAction } from "@cpai/core/protocol";
+import { botPool } from "./bot-pool.ts";
+import { LOG_MESSAGES, buildNameIndex, labelAction } from "./labels.ts";
 import { GAMES_DIR } from "./paths.ts";
 
 const HUMAN = createPlayerId("p1");
-
-interface AtomicGigChoice {
-  type: string;
-  payload: {
-    type?: string;
-    targetKind?: string;
-    eligibleIds?: string[];
-    adjustGig?: { direction?: string; maxAmount?: number; chooseUpTo?: boolean };
-    min?: number;
-    canDecline?: boolean;
-  };
-}
-
-/**
- * "Adjust a Gig by up to N" effects must be answered with die + value in one command (resolveAdjustGig).
- * The bots' enumeration only knows the two-step form, so expand every (die, value) pair here.
- */
-function expandAtomicGigAdjust(choice: AtomicGigChoice, view: MatchView): { move: string; args?: Record<string, unknown> }[] {
-  const p = choice.payload;
-  if (choice.type !== "chooseTarget" || p.targetKind !== "gig" || !p.adjustGig) return [];
-  const dice = new Map<string, { value: number; max: number }>();
-  for (const pl of Object.values(view.players)) {
-    const area = pl.zones.gigArea;
-    if (Array.isArray(area)) for (const d of area) dice.set(d.instanceId, { value: d.power, max: Number(String(d.definitionId).replace(/\D/g, "")) || 20 });
-  }
-  const amount = p.adjustGig.maxAmount ?? 1;
-  const dir = p.adjustGig.direction ?? "either";
-  const out: { move: string; args?: Record<string, unknown> }[] = [];
-  for (const dieId of p.eligibleIds ?? []) {
-    const die = dice.get(dieId);
-    if (!die) continue;
-    for (let v = Math.max(1, die.value - amount); v <= Math.min(die.max, die.value + amount); v++) {
-      if (v === die.value) continue;
-      if (dir === "increase" && v < die.value) continue;
-      if (dir === "decrease" && v > die.value) continue;
-      out.push({ move: "resolveAdjustGig", args: { kind: "adjust", dieId, value: v } });
-    }
-  }
-  if (p.adjustGig.chooseUpTo || p.canDecline || (p.min ?? 1) === 0) out.push({ move: "resolveAdjustGig", args: { kind: "noAdjustment" } });
-  return out;
-}
 const BOT = createPlayerId("p2");
 
 type Listener = (msg: ServerMessage) => void;
@@ -90,7 +49,9 @@ export class GameSession {
   private botThinking = false;
   private botLastCardIds: string[] = [];
   private pumping = false;
-  private worker = new BotWorker();
+  /** What the bot's seat has been shown so far (the only hidden-card knowledge fair bots get). */
+  private botKnowledge = new KnowledgeTracker(BOT);
+  private botInfo: GameStateMessage["botInfo"] = null;
   botDelayMs = 700;
   lastActivity = Date.now();
 
@@ -100,21 +61,22 @@ export class GameSession {
     readonly botStrategy: string,
     seed?: string,
   ) {
-    if (!STRATEGIES[botStrategy]) throw new Error(`Nieznany bot: ${botStrategy}`);
+    if (!STRATEGIES[botStrategy]) throw new Error(`Unknown bot: ${botStrategy}`);
     this.seed = seed ?? randomUUID();
     const catalog = getCatalog();
     const state = createMatchState({
       players: [
-        { id: HUMAN, name: "Ty" },
+        { id: HUMAN, name: "You" },
         { id: BOT, name: "Bot" },
       ],
       catalog: catalog.engineCatalog,
-      deckLists: [toEngineDeckList(yourDeck, "p1", "Ty"), toEngineDeckList(botDeck, "p2", "Bot")],
+      deckLists: [toEngineDeckList(yourDeck, "p1", "You"), toEngineDeckList(botDeck, "p2", "Bot")],
       seed: this.seed,
       matchId: this.id,
     });
     this.engine = new LocalEngine(state);
-    this.pushSystem(`Nowa partia: ${yourDeck.name} (Ty) vs ${botDeck.name} (bot: ${STRATEGIES[botStrategy]!.label}).`);
+    this.botKnowledge.observe(this.engine.getState());
+    this.pushSystem(`${yourDeck.name} vs ${botDeck.name}`);
     this.refreshActions();
     void this.pump();
   }
@@ -161,6 +123,7 @@ export class GameSession {
       log: this.log,
       botThinking: this.botThinking,
       botLastCardIds: this.botLastCardIds,
+      botInfo: this.botInfo,
       result,
     };
   }
@@ -201,7 +164,7 @@ export class GameSession {
       this.actions.push({ id: `${sid}.${this.actions.length}`, move: d.move, args: d.args, ...l });
     }
     if (autoChoice) {
-      this.actions.push({ id: `${sid}.${this.actions.length}`, move: autoChoice.move, args: autoChoice.args, label: "Rozpatrz automatycznie (domyślny wybór)", group: "choice" });
+      this.actions.push({ id: `${sid}.${this.actions.length}`, move: autoChoice.move, args: autoChoice.args, label: "Resolve", group: "choice" });
     }
   }
 
@@ -230,16 +193,8 @@ export class GameSession {
         .map((id) => idx.card(id))
         .filter((c): c is NonNullable<typeof c> => !!c && !!c.cardName && !!c.definitionId)
         .map((c) => ({ instanceId: c.instanceId, definitionId: c.definitionId }));
-      if (key === "setup.firstPlayerChoice") {
-        const order = String((ev.params as Record<string, unknown>).order ?? "");
-        (ev.params as Record<string, unknown>).order = order === "first" ? "pierwszy" : order === "second" ? "drugi" : order;
-      }
-      // Use the Polish template only when every placeholder it needs is present in this event.
-      const tpl = LOG_MESSAGES[key as keyof typeof LOG_MESSAGES] ?? "";
-      const params = ev.params as Record<string, unknown>;
-      const complete = [...tpl.matchAll(/\{(\w+)\}/g)].every((m) => m[1] === "playerId" || params[m[1]!] !== undefined);
-      const text = formatActionLog(ev, complete ? LOG_MESSAGES : LOG_MESSAGES_EN);
-      this.log.push({ seq: ++this.logSeq, turn: view.turnNumber, actor, text, cards });
+      const text = formatActionLog(ev, LOG_MESSAGES);
+      this.log.push({ seq: ++this.logSeq, turn: view.turnNumber, actor, text, cards, key });
     }
     if (this.log.length > 600) this.log.splice(0, this.log.length - 600);
   }
@@ -253,14 +208,11 @@ export class GameSession {
     );
     if (!result.success) return result;
     this.commands.push({ seat: seat as "p1" | "p2", move, args, turn: turnBefore, ms });
+    this.botKnowledge.observe(this.engine.getState());
     this.appendEvents(result.gameEvents);
     this.lastActivity = Date.now();
     const view = this.view();
     if (view.turnNumber !== turnBefore || view.gameEnded) this.save();
-    if (view.gameEnded) {
-      const who = view.winnerId === HUMAN ? "Wygrywasz!" : view.winnerId === BOT ? "Wygrywa bot." : "Remis.";
-      this.pushSystem(`Koniec gry — ${who} (${view.winReason ?? "?"})`);
-    }
     return result;
   }
 
@@ -268,22 +220,99 @@ export class GameSession {
     const a = this.actions.find((x) => x.id === actionId);
     if (!a) {
       this.broadcast();
-      return this.notify({ type: "error", message: "Ta akcja jest już nieaktualna — wybierz ponownie." });
+      return this.notify({ type: "error", message: "The game state changed. Try again." });
     }
     this.handleCommand(a.move, a.args, stateID);
   }
 
+  /**
+   * A table gesture (drag & drop, click). Map it to the legal command it means; when several fit
+   * (two abilities, several targets) let the player pick; when none does, report the engine's reason.
+   */
+  handleIntent(intent: Intent, stateID: number) {
+    if (stateID !== this.view().stateID) {
+      this.broadcast();
+      return this.notify({ type: "error", message: "The game state changed. Try again." });
+    }
+    const arg = (a: UiAction, k: string) => (a.args ?? {})[k];
+    const has = (a: UiAction, k: string, id: string) => {
+      const v = arg(a, k);
+      return v === id || (Array.isArray(v) && v.includes(id));
+    };
+    let matches: UiAction[];
+    let probe: { move: string; args?: Record<string, unknown> } | null = null;
+    switch (intent.kind) {
+      case "play":
+        matches = this.actions.filter(
+          (a) =>
+            (a.move === "playCard" || a.move === "resolveCardToPlay") &&
+            arg(a, "cardId") === intent.cardId &&
+            (intent.targetId ? arg(a, "attachToId") === intent.targetId : true),
+        );
+        // Dropping a Gear on the field (no host) is not a play; let the player pick the host.
+        probe = { move: "playCard", args: { cardId: intent.cardId, ...(intent.targetId ? { attachToId: intent.targetId } : {}) } };
+        break;
+      case "sell":
+        matches = this.actions.filter((a) => a.move === "sellCard" && arg(a, "cardId") === intent.cardId);
+        probe = { move: "sellCard", args: { cardId: intent.cardId } };
+        break;
+      case "call":
+        matches = this.actions.filter((a) => a.move === "callLegend" && arg(a, "legendId") === intent.cardId);
+        probe = { move: "callLegend", args: { legendId: intent.cardId } };
+        break;
+      case "attack":
+        matches =
+          intent.targetId === "rival"
+            ? this.actions.filter((a) => a.move === "attackRival" && arg(a, "attackerId") === intent.cardId)
+            : this.actions.filter((a) => a.move === "attackUnit" && arg(a, "attackerId") === intent.cardId && arg(a, "defenderId") === intent.targetId);
+        probe =
+          intent.targetId === "rival"
+            ? { move: "attackRival", args: { attackerId: intent.cardId } }
+            : { move: "attackUnit", args: { attackerId: intent.cardId, defenderId: intent.targetId } };
+        break;
+      case "block":
+        matches = this.actions.filter((a) => a.move === "useBlocker" && arg(a, "blockerId") === intent.cardId);
+        probe = { move: "useBlocker", args: { blockerId: intent.cardId } };
+        break;
+      case "activate":
+        matches = this.actions.filter((a) => a.move === "activateAbility" && arg(a, "cardId") === intent.cardId);
+        probe = { move: "activateAbility", args: { cardId: intent.cardId, abilityIndex: 0 } };
+        break;
+      case "goSolo":
+        matches = this.actions.filter((a) => a.move === "goSolo" && arg(a, "cardId") === intent.cardId);
+        probe = { move: "goSolo", args: { cardId: intent.cardId } };
+        break;
+      case "pass":
+        matches = this.actions.filter((a) => a.move === "passPhase");
+        break;
+      case "select": {
+        const keys = ["cardId", "dieId", "targetIds", "cardIds", "dieIds", "legendId", "blockerId"];
+        matches = this.actions.filter((a) => (a.group === "choice" || a.move === "gainGig") && keys.some((k) => has(a, k, intent.id)));
+        break;
+      }
+    }
+    if (matches.length === 1) return this.handleCommand(matches[0]!.move, matches[0]!.args, stateID);
+    if (matches.length > 1) return this.notify({ type: "options", title: matches[0]!.label.split(":")[0]!, options: matches.map((a) => ({ id: a.id, label: a.label })) });
+    if (this.engine.getPrompt(HUMAN).status === "waiting") return this.notify({ type: "error", message: "It is not your turn." });
+    let reason = "Not allowed now.";
+    if (probe) {
+      const r = this.engine.fork().processCommand({ commandID: "probe", move: probe.move as never, input: probe.args ? { args: probe.args } : undefined } as never, HUMAN);
+      if (!r.success) reason = (r as { error?: string }).error ?? reason;
+    }
+    this.notify({ type: "error", message: reason });
+  }
+
   handleCommand(move: string, args: Record<string, unknown> | undefined, stateID: number) {
     if (this.pumping && this.engine.getPrompt(HUMAN).status === "waiting") {
-      return this.notify({ type: "error", message: "Poczekaj — teraz ruch bota." });
+      return this.notify({ type: "error", message: "It is not your turn." });
     }
     if (stateID !== this.view().stateID) {
       this.broadcast();
-      return this.notify({ type: "error", message: "Stan gry się zmienił — wybierz akcję jeszcze raz." });
+      return this.notify({ type: "error", message: "The game state changed. Try again." });
     }
     const result = this.apply(HUMAN, move, args);
     if (!result.success) {
-      this.notify({ type: "error", message: `Ruch odrzucony przez silnik: ${(result as { error?: string }).error ?? "?"}` });
+      this.notify({ type: "error", message: (result as { error?: string }).error ?? "Not allowed now." });
       return;
     }
     this.botLastCardIds = [];
@@ -315,25 +344,31 @@ export class GameSession {
         this.broadcast();
         const started = Date.now();
         const seed = `${this.seed}:${this.commands.length}`;
-        let decision = await this.worker
-          .decide(this.engine.getState(), BOT, this.botStrategy, seed)
+        let decision = await botPool
+          .decide(this.engine.getState(), BOT, this.botStrategy, seed, this.botKnowledge.ids())
           .catch((err: Error) => {
             console.error("[bot] worker error:", err.message);
             return null;
           });
         if (!decision) decision = decideBotCommand(this.engine.getState(), BOT, "greedy", seed);
         if (!decision) {
-          this.pushSystem("Bot utknął (brak legalnego ruchu) — zgłoś to jako błąd.");
+          this.pushSystem("Bot error: no legal move found.");
           break;
         }
+        if (decision.info) this.botInfo = { iterations: decision.info.iterations, winRate: decision.info.winRate, ms: Math.round(decision.ms) };
         const wait = this.botDelayMs - (Date.now() - started);
         if (wait > 0) await delay(wait);
-        const res = this.apply(BOT, decision.move, decision.args, decision.ms);
+        let res = this.apply(BOT, decision.move, decision.args, decision.ms);
+        // ISMCTS ranks several moves; if the engine rejects the best one, try the next.
+        for (const alt of decision.alternatives ?? []) {
+          if (res.success) break;
+          res = this.apply(BOT, alt.move, alt.args, decision.ms);
+        }
         if (!res.success) {
           console.error("[bot] rejected", decision, (res as { error?: string }).error);
           const fallback = decideBotCommand(this.engine.getState(), BOT, "greedy", seed + ":fb");
           if (!fallback || !this.apply(BOT, fallback.move, fallback.args).success) {
-            this.pushSystem("Bot wykonał nielegalny ruch — partia wstrzymana. Zgłoś to jako błąd.");
+            this.pushSystem("Bot error: illegal move, game paused.");
             break;
           }
         }
@@ -375,7 +410,6 @@ export class GameSession {
   }
 
   dispose() {
-    this.worker.terminate();
     this.listeners.clear();
   }
 }

@@ -37,3 +37,11 @@ commit: `6de59de1c203827edc1bc6faa1bc6184cd126a5f`
   animation "emphasis" step (presentation only, game state is correct). Left visible.
 6. `cyberpunk-engine/src/index.ts`: re-export `enumerateCandidateActions` / `enumerateChoiceActions`
    (used by the game server to list legal actions for the human player).
+7. `cyberpunk-engine/src/command/processor.ts`: added `processCommandLean` (same rules path as
+   `processCommand`, without undo patches / move logs / animation / clock) for ISMCTS simulations;
+   exported from `command/index.ts` and `src/index.ts`. Never used for the authoritative game.
+8. `cyberpunk-engine/src/view/filter.ts`: face-down Legends are hidden from their owner too
+   (CR 5.7.4.1; only `meta.revealed` from a "look at" effect shows them), also as effect sources.
+   Test `tests/comprehensive-rules/cr-gigs-hidden.test.ts` updated to assert the rule.
+   Note: `tests/automation/boundary.test.ts > scans at least one strategy and one resolver` fails in this
+   checkout (path scan); not investigated yet, unrelated to the patches above.
