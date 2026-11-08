@@ -57,6 +57,11 @@ Do zrobienia w etapie 4:
 - **Strona dostępna zawsze, dla każdego** (hosting w chmurze, np. Fly.io / Render / mały VPS, serwer działa 24/7 bez
   Twojego komputera) + **dołączanie 6-cyfrowym kodem pokoju** (zamiast długiego linku); do przemyślenia: konta/
   nicki, limit pokoi, koszt hostingu, gdzie trzymać talie użytkowników.
+  Decyzje gracza: **hosting wyłącznie darmowy**; serwer **usypia, gdy nikt nie gra**, i budzi się na żądanie z
+  **ekranem ładowania**. Propozycja: lekka strona startowa na darmowym statycznym hostingu (Cloudflare Pages /
+  GitHub Pages, zawsze dostępna) pokazuje ekran ładowania i „budzi” serwer gry na darmowym planie z usypianiem
+  (np. Render free: zasypia po ~15 min, start ~30–60 s), potem przechodzi do lobby. Wzór od gracza:
+  https://claude.ai/artifact/T5tyuer5ype1xnNK4fU8TZ (aplikacja znajomego) — obejrzeć na początku sesji.
 - **Usuwanie talii wbudowanych z poziomu strony**: dziś usuwać można tylko własne (★); dodać „ukryj” dla talii
   z `data/decks` (bez kasowania plików) albo przenoszenie ich do Twoich talii.
 - **AI tworzy talie samo, na bazie mety**: import najczęściej granych talii (etap 7: tcgcontender, ripperdeck,
