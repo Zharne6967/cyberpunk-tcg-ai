@@ -66,8 +66,20 @@ function choiceLabel(a: UiAction, s: GameStateMessage): string {
   return a.label;
 }
 
+/** Cards/dice a choice option refers to (highlighted on the table while hovering the option). */
+function choiceIds(a: UiAction): string[] {
+  const args = a.args ?? {};
+  const ids: string[] = [];
+  for (const k of ["cardId", "dieId", "targetIds", "cardIds", "dieIds"]) {
+    const v = args[k];
+    if (typeof v === "string") ids.push(v);
+    else if (Array.isArray(v)) ids.push(...v.filter((x): x is string => typeof x === "string"));
+  }
+  return ids;
+}
+
 /** The decision the rules ask you to make right now (targets, pending effects, Gig choices…). */
-export function DecisionPanel({ s, db, send, sendAction }: { s: GameStateMessage; db: CardDb; send: Send; sendAction: (a: UiAction) => void }) {
+export function DecisionPanel({ s, db, send, sendAction, onHover }: { s: GameStateMessage; db: CardDb; send: Send; sendAction: (a: UiAction) => void; onHover: (ids: string[]) => void }) {
   const choice = s.choice;
   if (!choice || s.view.gamePhase === "setup") return null;
   const source = (choice.payload as { source?: { displayName?: string; rulesText?: string } } | undefined)?.source;
@@ -85,7 +97,13 @@ export function DecisionPanel({ s, db, send, sendAction }: { s: GameStateMessage
       {choice.type === "preventGigSteal" && <PreventStealPicker s={s} send={send} />}
       <div className="decision-buttons">
         {acts.map((a) => (
-          <button key={a.id} className="btn act" onClick={() => sendAction(a)}>
+          <button
+            key={a.id}
+            className="btn act"
+            onClick={() => (onHover([]), sendAction(a))}
+            onMouseEnter={() => onHover(choiceIds(a))}
+            onMouseLeave={() => onHover([])}
+          >
             {choiceLabel(a, s)}
           </button>
         ))}

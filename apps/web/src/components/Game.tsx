@@ -426,7 +426,7 @@ export function Game({ gameId }: { gameId: string }) {
         </div>
         <aside className="sidebar">
           <LogPanel log={state.log} onCard={(definitionId) => setInspect({ definitionId })} />
-          <DecisionPanel s={state} db={db} send={sendCommand} sendAction={sendAction} />
+          <DecisionPanel s={state} db={db} send={sendCommand} sendAction={sendAction} onHover={setHover} />
           {hints && <ActionPanel s={state} sendAction={sendAction} onHover={setHover} />}
         </aside>
       </div>
