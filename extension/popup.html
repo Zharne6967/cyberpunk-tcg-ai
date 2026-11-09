@@ -10,12 +10,18 @@
       label { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; font-weight: 600; }
       input { width: 18px; height: 18px; accent-color: #3dff9a; }
       p { margin: 0; color: #8a8a9c; font-size: 12px; }
+      .state { color: #ececf2; }
+      button { background: #15171e; color: #ececf2; border: 1px solid #333744; border-radius: 4px; padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer; align-self: flex-start; }
+      h1 span { color: #8a8a9c; font-weight: 400; letter-spacing: 0; }
     </style>
   </head>
   <body>
     <div class="wrap">
-      <h1>CYBERPUNK TCG COACH</h1>
+      <h1>CYBERPUNK TCG COACH <span id="version"></span></h1>
       <label>Coach <input id="on" type="checkbox" /></label>
+      <p class="state" id="status">This page: …</p>
+      <p class="state" id="engine">Coach engine: …</p>
+      <button id="reset">Reset box position</button>
       <p>Best move from what you know, on cyberpunk-tcg-sim.online. Off in Quick Play, public lobbies, Ranked and tournaments.</p>
     </div>
     <script src="popup.js"></script>

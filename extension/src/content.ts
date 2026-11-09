@@ -39,6 +39,8 @@ let enabled = false;
 let expanded = false;
 let pos = { x: 12, y: 12 };
 let snapshot: SimSnapshot | null = null;
+/** The site's game state was found (false: the site changed and the coach cannot read it). */
+let appFound: boolean | null = null;
 let view: { kind: "hidden" } | { kind: "paused" | "waiting" | "thinking" | "note"; text: string } | { kind: "advice"; advice: Advice } = { kind: "hidden" };
 
 const host = document.createElement("div");
@@ -56,8 +58,9 @@ function render() {
     return;
   }
   box.hidden = false;
-  box.style.left = `${pos.x}px`;
-  box.style.top = `${pos.y}px`;
+  // Never outside the window (a place saved on a bigger screen would hide the box).
+  box.style.left = `${Math.max(0, Math.min(window.innerWidth - 262, pos.x))}px`;
+  box.style.top = `${Math.max(0, Math.min(window.innerHeight - 64, pos.y))}px`;
   const paused = view.kind === "paused";
   let head = `<span class="badge ${paused ? "paused" : ""}">${paused ? "COACH PAUSED" : "COACH ON"}</span>`;
   let line = "";
@@ -165,18 +168,42 @@ function update() {
 window.addEventListener("message", (e) => {
   if (e.source !== window || e.data?.source !== "cpai-coach-page") return;
   snapshot = e.data.snapshot as SimSnapshot | null;
+  appFound = e.data.app !== false;
   update();
 });
+window.addEventListener("resize", () => render());
 
-chrome.storage.local.get({ enabled: false, pos: { x: 12, y: 12 } }).then((v: { enabled: boolean; pos: { x: number; y: number } }) => {
+/** What the extension button shows about this page. */
+chrome.runtime.onMessage.addListener((msg: { type?: string }, _sender: unknown, sendResponse: (r: unknown) => void) => {
+  if (msg?.type !== "status") return;
+  const text =
+    appFound === false
+      ? "The coach cannot read this page (the site may have changed)"
+      : !snapshot
+        ? "No game on this page yet"
+        : !enabled
+          ? "Coach is off"
+          : view.kind === "advice"
+            ? "Showing advice"
+            : "text" in view
+              ? view.text
+              : "Waiting for your decision";
+  sendResponse({ text, mode: snapshot?.room?.mode ?? null });
+});
+
+chrome.storage.local.get({ enabled: true, pos: { x: 12, y: 12 } }).then((v: { enabled: boolean; pos: { x: number; y: number } }) => {
   enabled = v.enabled;
   pos = v.pos;
   update();
 });
 chrome.storage.onChanged.addListener((changes: Record<string, { newValue: unknown }>) => {
   if (changes.enabled) {
-    enabled = changes.enabled.newValue === true;
+    enabled = changes.enabled.newValue !== false;
     shown = "";
     update();
+  }
+  if (changes.pos?.newValue) {
+    pos = changes.pos.newValue as { x: number; y: number };
+    render();
   }
 });

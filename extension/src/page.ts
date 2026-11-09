@@ -54,8 +54,8 @@ let last = "";
 setInterval(() => {
   const app = (window as unknown as { __cyberpunkTcgApp?: { snapshot?: Json } }).__cyberpunkTcgApp;
   const snap = app?.snapshot ? trimmed(app.snapshot) : null;
-  const text = JSON.stringify(snap);
+  const text = JSON.stringify([!!app, snap]);
   if (text === last) return;
   last = text;
-  window.postMessage({ source: "cpai-coach-page", snapshot: snap }, location.origin);
+  window.postMessage({ source: "cpai-coach-page", snapshot: snap, app: !!app }, location.origin);
 }, 500);

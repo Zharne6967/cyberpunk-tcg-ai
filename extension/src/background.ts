@@ -15,6 +15,10 @@ chrome.runtime.onInstalled.addListener(() => {
 
 let n = 0;
 chrome.runtime.onMessage.addListener((msg: { type?: string; snapshot?: unknown }, _sender: unknown, sendResponse: (r: unknown) => void) => {
+  if (msg?.type === "ping") {
+    sendResponse({ ok: true, version: chrome.runtime.getManifest().version });
+    return;
+  }
   if (msg?.type !== "advise") return;
   try {
     const r = convertSimSnapshot(msg.snapshot as never, "ext");

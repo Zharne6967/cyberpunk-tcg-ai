@@ -7,8 +7,16 @@ i zakryte karty są dla niego tak samo nieznane jak dla Ciebie) — i to na Twoi
 nigdzie wysyłane.
 
 ## Aktualizacja
-Po podmianie plików wtyczki: `chrome://extensions` → przy „Cyberpunk TCG Coach” ikona odświeżania (↻), potem
-odśwież stronę gry (F5).
+Najpewniej: `chrome://extensions` → przy starym „Cyberpunk TCG Coach” **Usuń**, potem **Załaduj rozpakowane** →
+folder z nową wersją, na końcu odśwież stronę gry (F5). Przy podmianie plików w tym samym folderze wystarczy ikona
+odświeżania (↻) przy wtyczce i F5 na stronie gry. Nie trzymaj dwóch wersji naraz.
+
+## Gdy nie działa
+Kliknij ikonę wtyczki (na stronie gry). Okienko pokazuje:
+- **This page: …** — co wtyczka widzi na tej stronie: „Showing advice”, „Rival's turn”, „Coach is off”,
+  „No game on this page yet”, „The coach cannot read this page (the site may have changed)”, albo prośbę o F5;
+- **Coach engine: ready** albo „not answering” (wtedy ↻ przy wtyczce w `chrome://extensions`);
+- **Reset box position** — przywraca okienko w lewy górny róg.
 
 ## Instalacja (Chrome / Edge)
 1. Rozpakuj `cyberpunk-tcg-coach.zip` do folderu (albo zbuduj sam: `node extension/build.mjs` → `extension/dist`).
@@ -24,11 +32,13 @@ odśwież stronę gry (F5).
   Regulamin strony zabrania pomocy z zewnątrz w meczach, które się liczą („cheats … to manipulate matches,
   rankings … or tournament results”), a gra z obcymi przeciwnikami ma być uczciwa.
 
-## Co umie (wersja 0.1.1)
+## Co umie (wersja 0.1.3)
 - Twoja **Main Phase** (zagranie, sprzedaż, Call a Legend, atak, Pass Turn) — także po atakach w tej samej turze —
   i **wybór kości Giga** na początku tury (tylko kości, którymi strona pozwala rzucić).
 - Gdy strona czeka na wybór (cel efektu, kradzież Giga, React Step), okienko pisze, czyj to wybór:
   „Your choice: …” albo „Rival is choosing” — podpowiedzi do tych wyborów jeszcze nie ma.
 - Nie czyta jeszcze efektów „do końca tury” z kart programów — wtedy podpowiedź jest przybliżona.
+- 0.1.2: ocena pozycji z self-play (mocniejsze podpowiedzi). 0.1.3: Coach jest włączony, dopóki go nie wyłączysz
+  (przycisk i okienko zawsze zgodne), okienko nie może zostać poza ekranem, diagnostyka w przycisku wtyczki.
 - Wtyczka czyta stan gry, który strona trzyma w przeglądarce; jeśli strona zmieni jego format, okienko napisze
   „The coach could not read this position” — wtedy trzeba zaktualizować wtyczkę.
