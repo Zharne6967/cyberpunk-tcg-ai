@@ -137,11 +137,14 @@ Normal / Deep. Runda: wyniki talii → najsłabsze karty (wynik gdy zagrana vs n
 halving: wszystkie na małej liczbie partii, lepsze na większej, te same ziarna co talia bazowa) → **finaliści i
 talia bazowa grają świeże partie**; podmiana przechodzi tylko przy zysku ≥ 3 pkt i z = 1,28 (wcześniejsza wersja
 bez tego kroku przyjmowała „szczęśliwe” podmiany: potwierdzenie 65,8% → 62,0%). Na końcu potwierdzenie oryginał vs
-wynik na nowych partiach, **Check with Hard bots** (boty Hard, 4 partie na rywala) i **Save as a new deck**.
+wynik na nowych partiach, **Check with Hard bots** (boty Hard, 12 partii na rywala) i **Save as a new deck**.
 Wszystko w przeglądarce (Normal vs 6 talii meta ≈ 7900 partii Easy; w przeglądarce ~25–30 partii/s).
 Kod: `packages/ai/src/doctor-loop.ts` (pętla bez danych kart, importuje ją strona), `packages/ai/src/doctor.ts`
 (karty), `apps/web/src/browserAnalysis.ts` (`doctorInBrowser`, `confirmInBrowser`), CLI
 `pnpm doctor --deck <id> [--opponents meta|all] [--verify masterful]`.
+Pierwszy test (Rogue AI GGR 40 vs 6 talii meta, Normal, 7716 partii, 242 s w CLI): −3 Satori: Sword of Saburo
++3 Valentino Street Racer, −2 Riot Shield +2 6th Street Recruits → boty Easy 66,7% → 75,3% (396 nowych partii),
+ale **boty Hard 71,5% → 72,9% (144 partie, w granicach szumu)** — zysk dotyczył głównie słabości bota Easy z Gear.
 Granice: boty Easy nie umieją grać częścią kart (np. zagrywanie Gear/Programów z warunkami), więc „słaba karta”
 bywa słaba dla bota, nie dla człowieka — stąd kontrola botami Hard; docelowo silniejszy bot do symulacji (etap 6).
 

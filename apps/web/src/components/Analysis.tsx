@@ -22,8 +22,8 @@ const DEPTHS: Record<"Quick" | "Normal" | "Deep", Partial<DoctorOptions>> = {
   Deep: { rounds: 3, stages: [96, 192, 384], keep: [8, 3, 2], check: 800, cuts: 5, adds: 8, confirm: 800 },
 };
 type DoctorState = { status: "running"; text: string; done: number; total: number } | { status: "done"; report: DoctorReport<DeckData> };
-/** Games per opponent for the check with Hard bots. */
-const VERIFY_PER = 4;
+/** Games per opponent for the check with Hard bots (fewer leave a ±15-point interval). */
+const VERIFY_PER = 12;
 
 function readHandoff(): DeckData | undefined {
   try {
@@ -432,7 +432,9 @@ function DoctorView({ db, report }: { db: CardDb; report: DoctorReport<DeckData>
           <span className="an-overall">
             <span className="small">Hard bots</span>
             <Result r={check} />
-            <span className="muted small">{check.games} games</span>
+            <span className="muted small">
+              {check.games} games · 95%: {pct(check.beforeCi[0])}–{pct(check.beforeCi[1])} → {pct(check.afterCi[0])}–{pct(check.afterCi[1])}
+            </span>
           </span>
         )}
       </div>
