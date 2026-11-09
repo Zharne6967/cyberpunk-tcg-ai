@@ -13,7 +13,7 @@ import { decideBotCommand, ensureRegistry } from "../decide.ts";
 import { actorOf, legalActions } from "../ismcts/actions.ts";
 
 export * from "./ctcg-sim-rules.ts";
-import type { SimCard, SimSnapshot } from "./ctcg-sim-rules.ts";
+import { simDecision, type SimCard, type SimSnapshot } from "./ctcg-sim-rules.ts";
 
 // ---- conversion
 
@@ -97,12 +97,9 @@ export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim"): SimCon
   const order = game.playerOrder?.length === 2 ? game.playerOrder : Object.keys(players);
   const rival = order.find((p) => p !== me);
   if (!me || !rival || !players[me] || !players[rival]) return { ok: false, reason: "No game in progress" };
-  if (game.winnerId) return { ok: false, reason: "The game is over" };
-  if (game.activePlayerId !== me) return { ok: false, reason: "Rival's turn" };
-  const step = game.turnStep ?? "";
-  const phase = step === "play" ? "main" : step === "ready_roll" ? "start" : null;
-  if (game.stage !== "player_turn" || !phase) return { ok: false, reason: "Waiting for your Main Phase" };
-  if (snap.controls?.pending) return { ok: false, reason: "Not during a choice" };
+  const decision = simDecision(snap);
+  if (decision.kind === "wait") return { ok: false, reason: decision.reason };
+  const phase = decision.kind;
 
   const d1 = deckFrom(snap.room?.deckSelections?.[me], "you");
   const d2 = deckFrom(snap.room?.deckSelections?.[rival], "rival");
@@ -162,7 +159,9 @@ export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim"): SimCon
       if (!card) continue;
       card.meta.spent = !!c.exhausted;
       // A Unit of yours that is ready but cannot attack was played this turn (Lag).
-      if (pid === "p1" && phase === "main" && !c.exhausted && c.canDeclareAttackThisTurn === false && c.type !== "Gear") card.meta.hasLag = true;
+      // Lag: the site marks it (status "lag"); older snapshots: a ready Unit of yours that cannot attack.
+      if (c.effects) card.meta.hasLag = c.effects.includes("lag");
+      else if (pid === "p1" && phase === "main" && !c.exhausted && c.canDeclareAttackThisTurn === false && c.type !== "Gear") card.meta.hasLag = true;
       for (const a of c.attachments ?? []) {
         const ac = typeof a === "string" ? { id: a } : a;
         const gear = place(takeKnown(ac), "field", ac);
@@ -264,7 +263,9 @@ export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim"): SimCon
   s.G.activeEffects = [];
   if (phase === "start") {
     // Start Phase: roll one of your Fixer dice (CR 8.6.5).
-    const allowed = s.G.players.p1!.fixerArea as string[];
+    // Only the dice the site lets you roll now (e.g. not the d20 early on).
+    const rollable = new Set((players[me]!.dicePool ?? []).filter((d) => d.canRoll).map((d) => (d.label ?? `d${d.sides}`).toLowerCase()));
+    const allowed = (s.G.players.p1!.fixerArea as string[]).filter((id) => !rollable.size || rollable.has((s.G.gigDice[id]!.dieType as string).toLowerCase()));
     if (!allowed.length) return { ok: false, reason: "No Fixer die to roll" };
     tm.pendingChoice = { type: "gainGig", chooserId: viewer, effectId: "start-phase", payload: { allowedDieIds: [...allowed] } } as never;
   }

@@ -4,7 +4,7 @@ import { buildPlayerPrompt, filterMatchView } from "@tcg/cyberpunk-engine";
 import { getCatalog } from "@cpai/core";
 import { legalActions } from "../ismcts/actions.ts";
 import { coachAdvice } from "../coach.ts";
-import { convertSimSnapshot, simCoachAllowed, type SimSnapshot } from "./ctcg-sim.ts";
+import { convertSimSnapshot, simCoachAllowed, simDecision, type SimSnapshot } from "./ctcg-sim.ts";
 
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8")) as SimSnapshot;
 
@@ -79,6 +79,56 @@ describe("cyberpunk-tcg-sim.online snapshot → engine (extension coach)", () =>
     expect(advice.moves.length).toBeGreaterThan(0);
     expect(advice.moves[0]!.label).toMatch(/Play a Card|Call a Legend|Pass Turn|Attack/);
   }, 60_000);
+
+  // Real states from a Solo game against the site's AI (turn 3; turn 5 right after an attack).
+  for (const name of ["solo-main-t3", "solo-after-attack-t5"]) {
+    it(`${name}: our engine offers exactly the site's actions for every card in hand`, () => {
+      const s = fixture(name);
+      const hand = s.players!.player1!.hand as unknown as { name: string; actions?: string[] }[];
+      expect(simDecision(s)).toEqual({ kind: "main" });
+      const r = convertSimSnapshot(s);
+      if (!r.ok) throw new Error(r.reason);
+      const cat = getCatalog().engineCatalog;
+      const nameOf = (id: unknown) => cat.get(r.state.G.cardIndex[id as string]!.definitionId)!.name;
+      const legal = legalActions(r.state, r.viewer);
+      const ours = (move: string) => new Set(legal.filter((a) => a.move === move).map((a) => nameOf(a.args!.cardId)));
+      const site = (type: string) => new Set(hand.filter((c) => c.actions?.includes(type)).map((c) => c.name.split(":")[0]!));
+      expect(ours("playCard")).toEqual(site("play_card"));
+      expect(ours("sellCard")).toEqual(site("sell_card"));
+      expect(legal.some((a) => a.move === "passPhase")).toBe(true);
+    });
+  }
+
+  it("after an attack the site keeps turnStep \"attack\": still your Main Phase (the coach used to stop here)", () => {
+    const s = fixture("solo-after-attack-t5");
+    expect(s.game!.turnStep).toBe("attack");
+    const r = convertSimSnapshot(s);
+    if (!r.ok) throw new Error(r.reason);
+    // Dexter already attacked (spent), the stolen d4 counts as your Gig.
+    expect(r.state.G.players.p1!.gigArea).toHaveLength(4);
+    const advice = coachAdvice({ stateID: 0, viewer: "p1", world: r.state, remembered: [] }, { iterations: 60, timeMs: 20_000, seed: "y" });
+    expect(advice.moves.length).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("Start Phase: only the dice the site lets you roll", () => {
+    const s = fixture("solo-main-t3");
+    const start: SimSnapshot = {
+      ...s,
+      game: { ...s.game, turnStep: "ready_roll", turnStepLabel: "Start Phase" },
+      players: { ...s.players, player1: { ...s.players!.player1!, dicePool: s.players!.player1!.dicePool!.map((d) => ({ ...d, canRoll: d.label === "d4" || d.label === "d6" })) } },
+    };
+    expect(simDecision(start)).toEqual({ kind: "start" });
+    const r = convertSimSnapshot(start);
+    if (!r.ok) throw new Error(r.reason);
+    const allowed = (r.state.G.turnMetadata.pendingChoice as { payload: { allowedDieIds: string[] } }).payload.allowedDieIds;
+    expect(allowed.map((id) => r.state.G.gigDice[id]!.dieType).sort()).toEqual(["d4", "d6"]);
+  });
+
+  it("choices on the site: says whose choice it is instead of advising", () => {
+    const s = fixture("solo-main-t3");
+    expect(simDecision({ ...s, controls: { pending: { type: "gig_increase_choice", stepLabel: "CHOOSE GIG", actorId: "player1" } } })).toEqual({ kind: "wait", reason: "Your choice: Choose gig" });
+    expect(simDecision({ ...s, controls: { pending: { type: "defense", stepLabel: "CHOOSE RESPONSE", actorId: "player2" } } })).toEqual({ kind: "wait", reason: "Rival is choosing" });
+  });
 
   it("explains when it cannot help", () => {
     expect(convertSimSnapshot({ ...snap, game: { ...snap.game, activePlayerId: "player2" } })).toEqual({ ok: false, reason: "Rival's turn" });

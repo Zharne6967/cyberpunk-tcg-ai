@@ -3,7 +3,7 @@
  * Shown only while the coach is switched on (extension button); works only where the site's terms
  * allow outside help (see simCoachAllowed) and only for your own decisions.
  */
-import { simCoachAllowed, type SimSnapshot } from "../../packages/ai/src/external/ctcg-sim-rules.ts";
+import { simCoachAllowed, simDecision, type SimSnapshot } from "../../packages/ai/src/external/ctcg-sim-rules.ts";
 
 declare const chrome: any;
 
@@ -40,7 +40,6 @@ let expanded = false;
 let pos = { x: 12, y: 12 };
 let snapshot: SimSnapshot | null = null;
 let view: { kind: "hidden" } | { kind: "paused" | "waiting" | "thinking" | "note"; text: string } | { kind: "advice"; advice: Advice } = { kind: "hidden" };
-let seq = 0;
 
 const host = document.createElement("div");
 const root = host.attachShadow({ mode: "closed" });
@@ -102,43 +101,65 @@ box.addEventListener("pointerdown", (e) => {
   window.addEventListener("pointerup", up);
 });
 
-function myDecision(s: SimSnapshot): boolean {
-  const g = s.game ?? {};
-  return g.stage === "player_turn" && g.activePlayerId === s.self?.playerId && (g.turnStep === "play" || g.turnStep === "ready_roll") && !s.controls?.pending && !g.winnerId;
+// ---- asking the coach: one search at a time; a newer position is searched right after the running one.
+/** The position the box should show advice for ("" when it is not your decision). */
+let wanted = "";
+/** The position whose result is on screen. */
+let shown = "";
+let running = false;
+let queued: { key: string; snap: SimSnapshot } | null = null;
+
+async function ask(key: string, snap: SimSnapshot) {
+  if (running) {
+    queued = { key, snap };
+    return;
+  }
+  running = true;
+  let r: { ok?: boolean; advice?: Advice; reason?: string } | undefined;
+  try {
+    r = await chrome.runtime.sendMessage({ type: "advise", snapshot: snap });
+  } catch {
+    r = { ok: false, reason: "Reload the page to use the coach" };
+  }
+  running = false;
+  if (key === wanted) {
+    shown = key;
+    view = r?.ok && r.advice ? { kind: "advice", advice: r.advice } : { kind: "note", text: r?.reason ?? "No advice" };
+    render();
+  }
+  const next = queued;
+  queued = null;
+  if (next && next.key === wanted && next.key !== shown) void ask(next.key, next.snap);
 }
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 function update() {
   clearTimeout(timer);
   if (!enabled || !snapshot) {
+    wanted = "";
     view = { kind: "hidden" };
     return render();
   }
   const gate = simCoachAllowed(snapshot);
   if (!gate.allowed) {
+    wanted = "";
     view = { kind: "paused", text: gate.reason ?? "Not available here" };
     return render();
   }
-  if (!myDecision(snapshot)) {
-    view = { kind: "waiting", text: "Waiting for your turn" };
+  const decision = simDecision(snapshot);
+  if (decision.kind === "wait") {
+    wanted = "";
+    view = { kind: "waiting", text: decision.reason };
     return render();
   }
+  const key = JSON.stringify(snapshot);
+  wanted = key;
+  if (key === shown && view.kind !== "waiting") return render();
   view = { kind: "thinking", text: "Thinking…" };
   render();
-  const id = ++seq;
   const snap = snapshot;
   // Short pause: the site sends several updates in a row after each move.
-  timer = setTimeout(async () => {
-    try {
-      const r = await chrome.runtime.sendMessage({ type: "advise", snapshot: snap });
-      if (id !== seq) return;
-      view = r?.ok ? { kind: "advice", advice: r.advice } : { kind: "note", text: r?.reason ?? "No advice" };
-    } catch {
-      if (id !== seq) return;
-      view = { kind: "note", text: "Reload the page to use the coach" };
-    }
-    render();
-  }, 300);
+  timer = setTimeout(() => void ask(key, snap), 250);
 }
 
 window.addEventListener("message", (e) => {
@@ -155,7 +176,7 @@ chrome.storage.local.get({ enabled: false, pos: { x: 12, y: 12 } }).then((v: { e
 chrome.storage.onChanged.addListener((changes: Record<string, { newValue: unknown }>) => {
   if (changes.enabled) {
     enabled = changes.enabled.newValue === true;
-    seq++;
+    shown = "";
     update();
   }
 });

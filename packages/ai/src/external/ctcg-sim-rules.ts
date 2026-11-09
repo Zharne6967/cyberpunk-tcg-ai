@@ -15,6 +15,8 @@ export interface SimCard {
   slotIndex?: number | null;
   canDeclareAttackThisTurn?: boolean;
   attachments?: (SimCard | string)[];
+  /** Status kinds from the card's currentEffects (e.g. "lag", "spent"). */
+  effects?: string[];
 }
 export interface SimDie {
   id?: string;
@@ -22,6 +24,8 @@ export interface SimDie {
   sides?: number;
   value?: number;
   available?: boolean;
+  /** The site lets you roll this Fixer die now (Start Phase). */
+  canRoll?: boolean;
   originalOwnerId?: string;
 }
 export interface SimPlayer {
@@ -53,6 +57,8 @@ export interface SimSnapshot {
   game?: {
     stage?: string;
     turnStep?: string | null;
+    /** "Main Phase" also while turnStep stays "attack" after an attack resolved. */
+    turnStepLabel?: string | null;
     turnNumber?: number;
     activePlayerId?: string | null;
     firstPlayerId?: string | null;
@@ -61,7 +67,29 @@ export interface SimSnapshot {
     winnerId?: string | null;
   };
   players?: Record<string, SimPlayer>;
-  controls?: { pending?: unknown };
+  /** pending: the site's open choice (type, label, who decides); primaryActions: action types such as "end_turn". */
+  controls?: { pending?: { type?: string; stepLabel?: string; actorId?: string } | boolean | null; primaryActions?: string[] };
+}
+
+export type SimDecision = { kind: "main" | "start" } | { kind: "wait"; reason: string };
+
+/** Is it your decision that the coach covers: your Main Phase, or the Gig roll that starts your turn? */
+export function simDecision(snap: SimSnapshot): SimDecision {
+  const g = snap.game ?? {};
+  const me = snap.self?.playerId;
+  const pending = snap.controls?.pending;
+  if (!me || !g.stage) return { kind: "wait", reason: "No game in progress" };
+  if (g.winnerId) return { kind: "wait", reason: "The game is over" };
+  if (pending) {
+    const p = typeof pending === "object" ? pending : {};
+    if (p.actorId && p.actorId !== me) return { kind: "wait", reason: "Rival is choosing" };
+    return { kind: "wait", reason: p.stepLabel ? `Your choice: ${p.stepLabel.charAt(0)}${p.stepLabel.slice(1).toLowerCase()}` : "Your choice on the board" };
+  }
+  if (g.stage !== "player_turn") return { kind: "wait", reason: "Waiting for the game to start" };
+  if (g.activePlayerId !== me) return { kind: "wait", reason: "Rival's turn" };
+  if (g.turnStep === "ready_roll") return { kind: "start" };
+  const main = g.turnStepLabel === "Main Phase" || g.turnStep === "play" || g.turnStep === "attack" || (snap.controls?.primaryActions ?? []).includes("end_turn");
+  return main ? { kind: "main" } : { kind: "wait", reason: "Waiting for your Main Phase" };
 }
 
 // ---- where the coach may run (the site's terms forbid outside help in matches that count)
