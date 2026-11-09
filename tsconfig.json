@@ -15,5 +15,5 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["tools/*/src", "packages/*/src", "apps/server/src"]
+  "include": ["tools/*/src", "packages/*/src", "apps/server/src", "extension/src"]
 }

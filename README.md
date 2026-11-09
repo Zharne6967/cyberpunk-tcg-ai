@@ -55,6 +55,11 @@ Przycisk **Deck Builder** w lobby (albo „Open in Deck Builder” przy Twojej t
   lobby z tą talią, **Analyze** otwiera analizę talii, **Delete** usuwa Twoją talię albo chowa wbudowaną
   („Restore built-in decks” ją przywraca).
 
+## Wtyczka do przeglądarki (trener na cyberpunk-tcg-sim.online)
+Folder `extension/` — ten sam trener w małym okienku na stronie cyberpunk-tcg-sim.online (Solo, Hotseat,
+samouczek, prywatne pokoje; wyłączony w Quick Play, Ranked i turniejach). Instalacja i szczegóły:
+[`extension/README.md`](extension/README.md). Budowanie: `node extension/build.mjs`.
+
 ## Deck Analysis
 Przycisk **Deck Analysis** w lobby (albo **Analyze** w Deck Builderze). Wybierasz talię albo wklejasz listę
 rywala; talia rozgrywa po 4/8/16 partii z każdą talią wbudowaną (boty Easy po obu stronach, miejsca

@@ -96,7 +96,14 @@ Do sprawdzenia przy okazji: ekran ładowania po uśpieniu serwera (po ~15 min be
   (początek Twojej następnej tury) osobno dla każdego pierwszego ruchu (`measure` w `ismctsSearch`); trener
   pokazuje do 2 wyraźnych zysków i 1 koszt najlepszego ruchu względem następnej opcji (Gigi, Street Cred,
   Jednostki, karty w ręce, Eddies, wygrana/przegrana), tylko gdy oba ruchy mają ≥ 20 symulacji.
-  Do zrobienia: trener we wtyczce do przeglądarki.
+  ✅ **Wtyczka do przeglądarki** v0.1 (2026-11-09, `extension/`, instrukcja w `extension/README.md`) dla
+  cyberpunk-tcg-sim.online: czyta `window.__cyberpunkTcgApp.snapshot` (strona trzyma w nim stan widziany przez
+  gracza i obie listy talii), `packages/ai/src/external/ctcg-sim.ts` odtwarza z niego stan naszego silnika
+  (prawdziwy setup z obiema listami, potem strefy, kości, flagi tury), trener liczy w service workerze wtyczki.
+  Małe okienko (2 linie, szczegóły po kliknięciu, przeciągane), przełącznik On/Off pod ikoną wtyczki.
+  Działa w Solo, Hotseat, samouczku i prywatnych pokojach; **wyłączona w Quick Play, publicznych lobby, Ranked,
+  turniejach i Pre-release** (regulamin strony zabrania pomocy z zewnątrz w meczach, które się liczą).
+  Do zrobienia: React Step ([BLOCKER]) i wybory celów, efekty „do końca tury”, Choombattler.
   Ryzyko techniczne: odczyt stanu z cudzej strony (DOM/WebSocket) bywa kruchy przy jej zmianach.
 
 ## Etap 5c — Analiza talii rywala i kontr-talia
