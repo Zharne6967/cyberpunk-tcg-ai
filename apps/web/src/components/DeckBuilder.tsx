@@ -52,7 +52,12 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
   const [target, setTarget] = useState<"main" | "side">("main");
   const [drawPct, setDrawPct] = useState(false);
 
-  const refreshDecks = () => api.decks().then((d) => setDecks(d.sort((a, b) => a.name.localeCompare(b.name))));
+  const [hidden, setHidden] = useState<Set<string>>(() => api.hiddenDecks());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const refreshDecks = () => {
+    setHidden(api.hiddenDecks());
+    return api.decks({ includeHidden: true }).then((d) => setDecks(d.sort((a, b) => a.name.localeCompare(b.name))));
+  };
   useEffect(() => {
     loadCardDb().then(setDb);
     void refreshDecks();
@@ -227,7 +232,7 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
         </a>
         <select value={pick} onChange={(e) => setPick(e.target.value)}>
           <option value="">Saved decks…</option>
-          {decks.map((d) => (
+          {decks.filter((d) => d.editable || !hidden.has(d.id)).map((d) => (
             <option key={d.id} value={d.id}>
               {d.editable ? "★ " : ""}
               {d.name} ({d.size})
@@ -252,16 +257,34 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
         </button>
         <button
           className="btn small danger"
-          disabled={!summary?.editable}
+          disabled={!summary}
+          onBlur={() => setConfirmDelete(false)}
           onClick={async () => {
-            if (!confirm(`Delete "${deck.name}"?`)) return;
-            await api.deleteDeck(deck.id).catch((e) => setToast(String(e.message ?? e)));
+            if (!summary) return;
+            if (!confirmDelete) return setConfirmDelete(true);
+            setConfirmDelete(false);
+            // Built-in decks stay on the server; deleting one removes it from your lists (can be restored).
+            if (summary.editable) await api.deleteDeck(deck.id).catch((e) => setToast(String(e.message ?? e)));
+            else api.setDeckHidden(deck.id, true);
             await refreshDecks();
+            setToast(`Deleted "${deck.name}"`);
             location.hash = "#/builder";
           }}
         >
-          Delete
+          {confirmDelete ? "Confirm delete" : "Delete"}
         </button>
+        {hidden.size > 0 && (
+          <button
+            className="btn small"
+            onClick={async () => {
+              for (const id of hidden) api.setDeckHidden(id, false);
+              await refreshDecks();
+              setToast(`Restored ${hidden.size} built-in deck${hidden.size === 1 ? "" : "s"}`);
+            }}
+          >
+            Restore built-in decks ({hidden.size})
+          </button>
+        )}
         <button className="btn small" onClick={() => setModal("import")}>
           Import
         </button>

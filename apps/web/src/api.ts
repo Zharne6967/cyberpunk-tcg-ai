@@ -59,10 +59,24 @@ const rawApi = {
 
 export const api = {
   config: () => (configPromise ??= getJson<ServerConfig>("/api/config").catch(() => ({ cloud: false, landingUrl: null }))),
-  /** Built-in decks + your decks (on this server locally, in this browser online). */
-  decks: async (): Promise<DeckSummary[]> => {
+  /** Built-in decks + your decks (on this server locally, in this browser online), without deleted built-in decks. */
+  decks: async (opts: { includeHidden?: boolean } = {}): Promise<DeckSummary[]> => {
     const [server, cfg] = await Promise.all([rawApi.decks(), api.config()]);
-    return cfg.cloud ? [...server, ...browserDecks().map((d) => d.summary)] : server;
+    const all = cfg.cloud ? [...server, ...browserDecks().map((d) => d.summary)] : server;
+    const hidden = hiddenDecks();
+    return opts.includeHidden ? all : all.filter((d) => d.editable || !hidden.has(d.id));
+  },
+  /** Built-in decks cannot be deleted from the server: "Delete" hides them in this browser. */
+  hiddenDecks: () => hiddenDecks(),
+  setDeckHidden: (id: string, hide: boolean) => {
+    const set = hiddenDecks();
+    if (hide) set.add(id);
+    else set.delete(id);
+    try {
+      localStorage.setItem(HIDDEN_KEY, JSON.stringify([...set]));
+    } catch {
+      /* private mode */
+    }
   },
   deck: async (id: string): Promise<DeckData> => browserDecks().find((d) => d.deck.id === id)?.deck ?? rawApi.deck(id),
   checkDeck: (deck: DeckData) => getJson<DeckCheck>("/api/decks/check", json("POST", { deck })),
@@ -110,6 +124,14 @@ export interface ServerConfig {
 let configPromise: Promise<ServerConfig> | undefined;
 
 const DECKS_KEY = "cpai.decks.v1";
+const HIDDEN_KEY = "cpai.hiddenDecks.v1";
+function hiddenDecks(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
 function browserDecks(): { deck: DeckData; summary: DeckSummary }[] {
   try {
     return JSON.parse(localStorage.getItem(DECKS_KEY) ?? "[]");

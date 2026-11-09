@@ -139,7 +139,18 @@ export function Lobby() {
   }
 
   useEffect(() => {
-    api.decks().then(setDecks).catch((e) => setError(String(e.message ?? e)));
+    api
+      .decks()
+      .then((list) => {
+        setDecks(list);
+        // A remembered deck may have been deleted since.
+        const legal = list.filter((d) => d.legal);
+        if (legal.length) {
+          setYourDeck((id) => (list.some((d) => d.id === id) ? id : legal[0]!.id));
+          setBotDeck((id) => (id === RANDOM || list.some((d) => d.id === id) ? id : (legal[1] ?? legal[0])!.id));
+        }
+      })
+      .catch((e) => setError(String(e.message ?? e)));
     api.bots().then(setBots).catch(() => {});
     loadCardDb().then(setDb).catch(() => {});
   }, []);

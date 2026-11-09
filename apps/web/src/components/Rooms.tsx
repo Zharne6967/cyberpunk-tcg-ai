@@ -110,7 +110,14 @@ export function JoinRoom({ gameId, invite }: { gameId: string; invite: string })
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     api.roomInfo(gameId, invite).then(setInfo).catch((e) => setError(String(e.message ?? e)));
-    api.decks().then(setDecks).catch(() => {});
+    api
+      .decks()
+      .then((list) => {
+        setDecks(list);
+        const first = list.find((d) => d.legal);
+        if (first) setDeckId((id) => (list.some((d) => d.id === id) ? id : first.id));
+      })
+      .catch(() => {});
     loadCardDb().then(setDb).catch(() => {});
   }, [gameId, invite]);
 
