@@ -212,6 +212,8 @@ Do zrobienia:
 1. Strojenie: horyzont dogrywki (`turns` 1 vs 2), ε, stała eksploracji; większe próbki (≥ 64 partie na porównanie).
 2. Słabe dopasowania (np. Judy vs Yorinobu 0/4) — obejrzeć partie i sprawdzić, czego bot nie widzi.
 3. Ocena pozycji: więcej cech (np. koszty kart w Fixerze/Overtime), trening na partiach ISMCTS zamiast greedy (etap 6).
+4. **Cel gracza (2026-11-09): nasz bot i trener we wtyczce mają być silniejsi niż „Rogue AI” na choombattler.com.**
+   Najpierw sprawdzić, jak tam się z nim gra i czy da się rozegrać serię partii (wynik = miara), potem strojenie.
 
 ## Etap 2 — notatki techniczne
 - Serwer liczy listę legalnych akcji silnikiem (`enumerateCandidateActions` / `enumerateChoiceActions`)
