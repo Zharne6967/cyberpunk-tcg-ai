@@ -7,8 +7,8 @@ i zakryte karty są dla niego tak samo nieznane jak dla Ciebie) — i to na Twoi
 nigdzie wysyłane.
 
 ## Aktualizacja
-Po podmianie plików wtyczki:  → przy „Cyberpunk TCG Coach” ikona odświeżania (↻), potem odśwież
-stronę gry (F5).
+Po podmianie plików wtyczki: `chrome://extensions` → przy „Cyberpunk TCG Coach” ikona odświeżania (↻), potem
+odśwież stronę gry (F5).
 
 ## Instalacja (Chrome / Edge)
 1. Rozpakuj `cyberpunk-tcg-coach.zip` do folderu (albo zbuduj sam: `node extension/build.mjs` → `extension/dist`).
