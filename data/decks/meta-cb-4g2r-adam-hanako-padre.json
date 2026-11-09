@@ -1,0 +1,37 @@
+{
+  "id": "meta-cb-4g2r-adam-hanako-padre",
+  "name": "4 Green / 2 Red — Adam Smasher · Hanako · Padre",
+  "source": {
+    "kind": "choombattler-meta",
+    "url": "https://choombattler.com/meta/4-green-2-red?queue=core-bo1&window=30d",
+    "date": "2026-11-09",
+    "note": "ChoomBattler ranked meta, Core BO1, last 30 days. Standard list (9.3% of the field, 47.6% win rate)."
+  },
+  "legends": [
+    "hanako-arasaka-daughter-of-the-emperor",
+    "padre-man-of-the-cross",
+    "adam-smasher-ender-of-legends"
+  ],
+  "main": {
+    "la-llorona-ghost-of-the-past": 1,
+    "valentino-street-racer": 2,
+    "6th-street-recruits": 2,
+    "meredith-stout-stone-cold-corpo": 2,
+    "pepe-najarro-working-doubles": 2,
+    "maxtac-av": 2,
+    "johnny-silverhand-never-stop-fighting": 2,
+    "sandayu-oda-hanako-s-guardian": 2,
+    "mantis-blades": 3,
+    "riot-shield": 2,
+    "satori-sword-of-saburo": 2,
+    "sandevistan": 2,
+    "overwatch-panam-s-gift": 2,
+    "detonate": 2,
+    "peace-offering": 2,
+    "synapse-burnout": 3,
+    "fool-on-the-hill": 2,
+    "memory-relapse": 2,
+    "wild-in-the-streets": 1,
+    "don-t-fear-the-reaper": 2
+  }
+}

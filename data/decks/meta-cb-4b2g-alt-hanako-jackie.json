@@ -1,0 +1,36 @@
+{
+  "id": "meta-cb-4b2g-alt-hanako-jackie",
+  "name": "4 Blue / 2 Green — Alt Cunningham · Hanako · Jackie",
+  "source": {
+    "kind": "choombattler-meta",
+    "url": "https://choombattler.com/meta/4-blue-2-green?queue=core-bo1&window=30d",
+    "date": "2026-11-09",
+    "note": "ChoomBattler ranked meta, Core BO1, last 30 days. Standard list (13.5% of the field, 50.2% win rate)."
+  },
+  "legends": [
+    "alt-cunningham-soulkiller-architect",
+    "hanako-arasaka-daughter-of-the-emperor",
+    "jackie-welles-pour-one-out-for-me"
+  ],
+  "main": {
+    "jacked-in-voodoo-boy": 3,
+    "valentino-street-racer": 1,
+    "pepe-najarro-working-doubles": 2,
+    "psycho-squad": 1,
+    "lizzy-wizzy-delicate-weapon": 2,
+    "maman-brigitte-spirit-of-death": 2,
+    "placide-voodoo-sentinel": 1,
+    "riot-shield": 1,
+    "floor-it": 1,
+    "peace-offering": 3,
+    "trust-no-one": 3,
+    "take-control": 1,
+    "three-mouths-one-desire": 3,
+    "chrome-reverie": 3,
+    "nocturne-op55-n1": 3,
+    "pyramid-song": 3,
+    "memory-relapse": 1,
+    "les-elemens": 3,
+    "towerfall": 3
+  }
+}

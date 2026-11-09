@@ -1,0 +1,31 @@
+{
+  "id": "rogue-ai-ggr-jackie-padre-v-45",
+  "name": "Rogue AI GGR (seen) — Jackie Welles · Padre · V (45)",
+  "source": {
+    "kind": "player-notes",
+    "date": "2026-11-09",
+    "note": "The Rogue AI's earlier deck as noted by the player; copies not known (all 3)."
+  },
+  "legends": [
+    "jackie-welles-mama-s-favorite",
+    "padre-man-of-the-cross",
+    "v-streetkid"
+  ],
+  "main": {
+    "corpo-security": 3,
+    "johnny-silverhand-never-stop-fighting": 3,
+    "la-llorona-ghost-of-the-past": 3,
+    "maxtac-av": 3,
+    "maxtac-squadron": 3,
+    "meredith-stout-stone-cold-corpo": 3,
+    "mantis-blades": 3,
+    "overwatch-panam-s-gift": 3,
+    "riot-shield": 3,
+    "sandevistan": 3,
+    "satori-sword-of-saburo": 3,
+    "don-t-fear-the-reaper": 3,
+    "fool-on-the-hill": 3,
+    "peace-offering": 3,
+    "wild-in-the-streets": 3
+  }
+}

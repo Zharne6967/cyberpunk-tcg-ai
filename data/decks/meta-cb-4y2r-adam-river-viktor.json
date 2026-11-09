@@ -1,0 +1,37 @@
+{
+  "id": "meta-cb-4y2r-adam-river-viktor",
+  "name": "4 Yellow / 2 Red — Adam Smasher · River Ward · Viktor Vektor",
+  "source": {
+    "kind": "choombattler-meta",
+    "url": "https://choombattler.com/meta/4-yellow-2-red?queue=core-bo1&window=30d",
+    "date": "2026-11-09",
+    "note": "ChoomBattler ranked meta, Core BO1, last 30 days. Standard list; most played archetype (25.5% of the field, 54.0% win rate). The Rogue AI (o7) played these Legends."
+  },
+  "legends": [
+    "river-ward-detective-on-the-hunt",
+    "viktor-vektor-sit-down-and-relax",
+    "adam-smasher-ender-of-legends"
+  ],
+  "main": {
+    "secondhand-bombus": 2,
+    "sketchy-ripper": 2,
+    "augmented-negotiators": 1,
+    "dexter-deshawn-one-last-chance": 1,
+    "6th-street-recruits": 2,
+    "meredith-stout-stone-cold-corpo": 2,
+    "maxtac-suppression-team": 1,
+    "rockn-rockerboy": 1,
+    "johnny-silverhand-never-stop-fighting": 3,
+    "mandibular-upgrade": 2,
+    "mantis-blades": 3,
+    "adrenaline-converter": 3,
+    "satori-sword-of-saburo": 3,
+    "zetatech-faceplate": 3,
+    "gorilla-arms": 1,
+    "detonate": 2,
+    "safety-override": 1,
+    "live-with-the-aftermath": 3,
+    "over-the-edge": 1,
+    "bootleg-black-sapphire-show": 3
+  }
+}

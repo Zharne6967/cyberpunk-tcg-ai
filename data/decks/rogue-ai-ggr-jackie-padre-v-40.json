@@ -1,0 +1,31 @@
+{
+  "id": "rogue-ai-ggr-jackie-padre-v-40",
+  "name": "Rogue AI GGR (estimate) — Jackie Welles · Padre · V (40)",
+  "source": {
+    "kind": "player-notes",
+    "date": "2026-11-09",
+    "note": "The player's list with copies rounded from ChoomBattler's 4 Green / 2 Red averages (Mantis Blades 2.9, Meredith 2.7, La Llorona 2.7, MaxTac AV 2.3, Overwatch 2.3, Riot Shield 2.2…); Corpo Security and MaxTac Squadron guessed at 2."
+  },
+  "legends": [
+    "jackie-welles-mama-s-favorite",
+    "padre-man-of-the-cross",
+    "v-streetkid"
+  ],
+  "main": {
+    "corpo-security": 2,
+    "johnny-silverhand-never-stop-fighting": 3,
+    "la-llorona-ghost-of-the-past": 3,
+    "maxtac-av": 2,
+    "maxtac-squadron": 2,
+    "meredith-stout-stone-cold-corpo": 3,
+    "mantis-blades": 3,
+    "overwatch-panam-s-gift": 2,
+    "riot-shield": 2,
+    "sandevistan": 3,
+    "satori-sword-of-saburo": 3,
+    "don-t-fear-the-reaper": 3,
+    "fool-on-the-hill": 3,
+    "peace-offering": 3,
+    "wild-in-the-streets": 3
+  }
+}
