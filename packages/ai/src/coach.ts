@@ -1,4 +1,5 @@
-import { SeededRNG, filterMatchView, type MatchState, type PlayerId } from "@tcg/cyberpunk-engine";
+import { SeededRNG, filterMatchView, getStreetCredForPlayer, type MatchState, type PlayerId } from "@tcg/cyberpunk-engine";
+import { getCatalog } from "@cpai/core";
 import { coachKey, type CoachAdvice, type CoachMove, type MatchView } from "@cpai/core/protocol";
 import { actorOf, applyAction, legalActions, type Action } from "./ismcts/actions.ts";
 import { determinize, informationSet } from "./ismcts/determinize.ts";
@@ -84,6 +85,68 @@ function settle(s: MatchState, rand: () => number): MatchState {
   return s;
 }
 
+// ---- Why: the table where the playouts end (the start of your next turn), averaged per first move.
+
+/** What the explanation can talk about, measured on a playout's final position. */
+function tableMeasures(viewer: string): (s: MatchState) => number[] {
+  const catalog = getCatalog().engineCatalog;
+  return (s) => {
+    const rival = (s.ctx.playerIds as string[]).find((p) => p !== viewer) ?? viewer;
+    const units = (pid: string) =>
+      (s.G.players[pid]?.zones.field ?? []).filter((id) => {
+        const t = catalog.get(s.G.cardIndex[id as string]?.definitionId ?? "")?.type;
+        return t === "unit" || t === "legend";
+      }).length;
+    const me = s.G.players[viewer]!;
+    return [
+      me.gigArea.length,
+      s.G.players[rival]?.gigArea.length ?? 0,
+      getStreetCredForPlayer(s, viewer as PlayerId),
+      getStreetCredForPlayer(s, rival as PlayerId),
+      units(viewer),
+      units(rival),
+      me.zones.hand.length,
+      me.zones.eddieArea.length,
+      s.G.gameEnded && s.G.winnerId === viewer ? 1 : 0,
+      s.G.gameEnded && s.G.winnerId === rival ? 1 : 0,
+    ];
+  };
+}
+
+const one = (x: number) => (Math.round(x * 10) / 10).toString();
+const percent = (x: number) => `${Math.round(x * 100)}%`;
+
+/**
+ * Index into tableMeasures, which direction is good for you, the difference that counts as clear
+ * (in the measure's own unit) and how to say it — official terms only.
+ */
+const WHY: { i: number; good: 1 | -1; clear: number; text: (a: string, b: string) => string; fmt: (x: number) => string }[] = [
+  { i: 8, good: 1, clear: 0.06, fmt: percent, text: (a, b) => `You win the game before your next turn: ${a} (${b})` },
+  { i: 9, good: -1, clear: 0.06, fmt: percent, text: (a, b) => `Your rival wins the game first: ${a} (${b})` },
+  { i: 0, good: 1, clear: 0.35, fmt: one, text: (a, b) => `Your Gigs: ${a} (${b})` },
+  { i: 1, good: -1, clear: 0.35, fmt: one, text: (a, b) => `Rival's Gigs: ${a} (${b})` },
+  { i: 2, good: 1, clear: 1.5, fmt: one, text: (a, b) => `Your Street Cred: ${a} (${b})` },
+  { i: 3, good: -1, clear: 1.5, fmt: one, text: (a, b) => `Rival's Street Cred: ${a} (${b})` },
+  { i: 4, good: 1, clear: 0.35, fmt: one, text: (a, b) => `Units on your field: ${a} (${b})` },
+  { i: 5, good: -1, clear: 0.35, fmt: one, text: (a, b) => `Units on the rival's field: ${a} (${b})` },
+  { i: 6, good: 1, clear: 0.6, fmt: one, text: (a, b) => `Cards in your hand: ${a} (${b})` },
+  { i: 7, good: 1, clear: 0.6, fmt: one, text: (a, b) => `Your Eddies: ${a} (${b})` },
+];
+
+/**
+ * Up to two clear gains of the best move over the next option, and its clearest cost — values are the
+ * averages over the simulations of each move (the next option's value in brackets).
+ */
+function explain(best: number[] | undefined, alt: number[] | undefined): CoachAdvice["why"] {
+  if (!best || !alt) return [];
+  const all = WHY.map((w) => ({ w, score: (w.good * (best[w.i]! - alt[w.i]!)) / w.clear }));
+  let gains = all.filter((x) => x.score >= 1).sort((a, b) => b.score - a.score).slice(0, 2);
+  // No clear gain: the largest smaller one, if any — a cost alone would not explain the choice.
+  if (!gains.length) gains = all.filter((x) => x.score >= 0.5).sort((a, b) => b.score - a.score).slice(0, 1);
+  const costs = gains.length ? all.filter((x) => x.score <= -1).sort((a, b) => a.score - b.score).slice(0, 1) : [];
+  return [...gains, ...costs].map(({ w, score }) => ({ text: w.text(w.fmt(best[w.i]!), w.fmt(alt[w.i]!)), good: score > 0 }));
+}
+
 export interface CoachOptions {
   iterations: number;
   timeMs: number;
@@ -103,16 +166,22 @@ export function coachAdvice(cw: CoachWorld, opts: CoachOptions): CoachAdvice {
   // Opening hand and first player: the bots' own heuristics (short playouts say little there).
   if (world.G.gamePhase === "setup") {
     const d = decideBotCommand(world, cw.viewer, "greedy", opts.seed);
-    return { stateID: cw.stateID, moves: d ? [move(d, 1, null)] : [], plan: [], iterations: 0, ms: performance.now() - t0 };
+    return { stateID: cw.stateID, moves: d ? [move(d, 1, null)] : [], plan: [], why: [], whyVs: null, iterations: 0, ms: performance.now() - t0 };
   }
-  const result = ismctsSearch(world, viewer, { iterations: opts.iterations, timeMs: opts.timeMs }, opts.seed, cw.remembered);
+  const result = ismctsSearch(world, viewer, { iterations: opts.iterations, timeMs: opts.timeMs }, opts.seed, cw.remembered, tableMeasures(cw.viewer));
   // Copies of the same card are separate commands with the same label: show each move once.
   const moves: CoachMove[] = [];
+  const measures: (number[] | undefined)[] = [];
   for (const r of rankStats(result.stats)) {
     const m = move(r.action, r.visits, result.trivial ? null : r.visits ? r.value / r.visits : null);
-    if (!moves.some((x) => x.label === m.label)) moves.push(m);
+    if (moves.some((x) => x.label === m.label)) continue;
+    moves.push(m);
+    measures.push(r.measures);
     if (moves.length === 3) break;
   }
+  // Why: compared with the next option, if both were simulated enough to say something.
+  const enough = (i: number) => (moves[i]?.visits ?? 0) >= 20;
+  const why = !result.trivial && enough(0) && enough(1) ? explain(measures[0], measures[1]) : [];
 
   // The rest of this turn as the search expects it: the player's own consecutive steps of the most
   // visited line, replayed in this world (a step that does not apply here ends the plan).
@@ -132,5 +201,5 @@ export function coachAdvice(cw: CoachWorld, opts: CoachOptions): CoachAdvice {
       s = applyAction(s, viewer, step.action);
     }
   }
-  return { stateID: cw.stateID, moves, plan, iterations: result.iterations, ms: performance.now() - t0 };
+  return { stateID: cw.stateID, moves, plan, why, whyVs: why.length ? moves[1]!.label : null, iterations: result.iterations, ms: performance.now() - t0 };
 }

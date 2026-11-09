@@ -58,13 +58,17 @@ export function policyAction(state: MatchState, pid: PlayerId, prompt: PlayerPro
  * Play the position forward with the fast policy for a few turns and score it for `viewer` in [0, 1].
  * Runs inside one determinized world, so both sides "know" that world's cards — that is the sample.
  */
-export function playout(start: MatchState, viewer: PlayerId, opts: PlayoutOptions, rng: () => number, previousActive?: string): number {
+/** `onEnd` receives the position the playout was scored on (the coach measures it). */
+export function playout(start: MatchState, viewer: PlayerId, opts: PlayoutOptions, rng: () => number, previousActive?: string, onEnd?: (s: MatchState) => void): number {
   let s = start;
   let rivalTurnsEnded = 0;
   // Active player before the move that produced `start`: a turn that just ended counts.
   let active = previousActive ?? (s.G.turnMetadata.activePlayerId as string);
   for (let step = 0; step < opts.maxSteps; step++) {
-    if (s.G.gameEnded) return terminalValue(s, viewer);
+    if (s.G.gameEnded) {
+      onEnd?.(s);
+      return terminalValue(s, viewer);
+    }
     const now = s.G.turnMetadata.activePlayerId as string;
     if (now !== active) {
       if (now === viewer && ++rivalTurnsEnded >= opts.turns) break;
@@ -96,5 +100,6 @@ export function playout(start: MatchState, viewer: PlayerId, opts: PlayoutOption
     if (!after) break;
     s = after;
   }
+  onEnd?.(s);
   return opts.evaluator === "board" ? boardWinProbability(s, viewer, opts.evalScale) : learnedWinProbability(s, viewer);
 }

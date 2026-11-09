@@ -92,7 +92,11 @@ Do sprawdzenia przy okazji: ekran ładowania po uśpieniu serwera (po ~15 min be
   przeglądarka liczy ISMCTS w Web Workerze (`coach-worker.ts`, ~1000 symulacji / 2,5 s; na telefonie 600 / 2 s).
   Testy `coach.test.ts`: świat zależy tylko od informacji gracza, id ukrytych kart przetasowane, ruchy legalne;
   `pnpm selftest 2 friend`: rywal widzi Coach ON, świat tylko dla właściciela miejsca z włączonym trenerem.
-  Do zrobienia: krótkie wyjaśnienie „dlaczego” (np. różnica szans względem Pass), trener we wtyczce.
+  ✅ Wyjaśnienia „dlaczego” (2026-11-09): wyszukiwanie mierzy stół w pozycjach, na których kończą się symulacje
+  (początek Twojej następnej tury) osobno dla każdego pierwszego ruchu (`measure` w `ismctsSearch`); trener
+  pokazuje do 2 wyraźnych zysków i 1 koszt najlepszego ruchu względem następnej opcji (Gigi, Street Cred,
+  Jednostki, karty w ręce, Eddies, wygrana/przegrana), tylko gdy oba ruchy mają ≥ 20 symulacji.
+  Do zrobienia: trener we wtyczce do przeglądarki.
   Ryzyko techniczne: odczyt stanu z cudzej strony (DOM/WebSocket) bywa kruchy przy jej zmianach.
 
 ## Etap 5c — Analiza talii rywala i kontr-talia

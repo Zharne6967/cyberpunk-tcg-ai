@@ -545,3 +545,6 @@ a { color: var(--cyan); }
   .coach-panel.compact { padding: 6px 8px; gap: 4px; }
   .sidebar .coach-panel { display: none; }
 }
+.coach-why { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 2px; border-top: 1px solid var(--line); }
+.coach-why .good { color: var(--coach); }
+.coach-why .cost { color: #ff8aa8; }

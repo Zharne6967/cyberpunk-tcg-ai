@@ -35,7 +35,10 @@ Stół wygląda jak dwie maty naprzeciw siebie: Twoja na dole, bota (obrócona) 
   Domyślnie wyłączony: grasz jak na żywo i sam pamiętasz, co możesz zrobić.
 - **Coach** (przełącznik u góry) — trener: przy każdej Twojej decyzji pokazuje najlepszy ruch (zielona
   ramka na karcie), 2 inne opcje z szansą na wygraną i dalszy plan na tę turę („Then: …”); klik w ruch go
-  wykonuje. Liczy ten sam uczciwy bot ISMCTS co poziomy Very Hard/Master, **tylko z tego, co Ty wiesz**,
+  wykonuje. **Dlaczego** — pod ruchami: jak wygląda stół na początku Twojej następnej tury po najlepszym
+  ruchu w porównaniu z następną opcją (średnie z symulacji: Gigi, Street Cred, Jednostki na polu, karty w
+  ręce, Eddies, wygrana/przegrana przed Twoją turą), np. „+ Rival's Gigs: 1.2 (2.0)”, „− Cards in your
+  hand: 3 (4)”. Liczy ten sam uczciwy bot ISMCTS co poziomy Very Hard/Master, **tylko z tego, co Ty wiesz**,
   i to w Twojej przeglądarce (~1000 symulacji w 2–3 s). Działa też w grze ze znajomym — wtedy rywal widzi
   znaczek **Coach ON**.
 - Każda partia zapisuje się w `var/games/` — z tych zapisów bot będzie się uczył (etap 6).

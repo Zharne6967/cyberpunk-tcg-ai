@@ -126,6 +126,16 @@ function CoachPanel({
       ) : items.length ? (
         <>
           {items.slice(0, compact ? 1 : 3).map((it, i) => row(it, i === 0))}
+          {!compact && advice && advice.why.length > 0 && (
+            <div className="coach-why small">
+              <div className="muted">By your next turn: this move (with {advice.whyVs})</div>
+              {advice.why.map((w) => (
+                <div key={w.text} className={w.good ? "good" : "cost"}>
+                  {w.good ? "+" : "−"} {w.text}
+                </div>
+              ))}
+            </div>
+          )}
           {advice && advice.plan.length > 0 && (
             <div className="coach-plan small">
               <span className="muted">Then: </span>
@@ -350,7 +360,7 @@ export function Game({ gameId }: { gameId: string }) {
     }
     if (onlyAction) {
       const m: CoachMove = { key: coachKey(onlyAction.move, onlyAction.args), move: onlyAction.move, args: onlyAction.args, label: onlyAction.label, cardId: onlyAction.cardId, targetId: onlyAction.targetId, visits: 0, winRate: null };
-      setCoach({ stateID, advice: { stateID, moves: [m], plan: [], iterations: 0, ms: 0 } });
+      setCoach({ stateID, advice: { stateID, moves: [m], plan: [], why: [], whyVs: null, iterations: 0, ms: 0 } });
       return;
     }
     let live = true;

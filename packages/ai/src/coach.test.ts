@@ -6,6 +6,7 @@ import { coachKey } from "@cpai/core/protocol";
 import { decideBotCommand, ensureRegistry } from "./decide.ts";
 import { actorOf, legalActions } from "./ismcts/actions.ts";
 import { determinize, informationSet } from "./ismcts/determinize.ts";
+import { ismctsSearch } from "./ismcts/search.ts";
 import { coachAdvice, coachWorld } from "./coach.ts";
 
 ensureRegistry();
@@ -90,5 +91,21 @@ describe("coach (the player's browser only gets what the player knows)", () => {
     }
     expect(advice.moves[0]!.visits).toBeGreaterThanOrEqual(advice.moves.at(-1)!.visits);
     expect(advice.iterations).toBe(80);
+    // The explanation compares with the next option; every line names the two averages.
+    if (advice.why.length) {
+      expect(advice.whyVs).toBe(advice.moves[1]!.label);
+      for (const w of advice.why) expect(w.text).toMatch(/: [\d.]+%? \([\d.]+%?\)$/);
+    } else expect(advice.whyVs).toBeNull();
+  }, 60_000);
+
+  it("the search measures the table where each first move's playouts end", () => {
+    const r = ismctsSearch(real, p2, { iterations: 60 }, "m", [], (s) => [s.G.players.p2!.zones.hand.length, 1]);
+    const visited = r.stats.filter((x) => x.visits > 0);
+    expect(visited.length).toBeGreaterThan(1);
+    for (const x of visited) {
+      expect(x.measures).toHaveLength(2);
+      expect(x.measures![1]).toBeCloseTo(1);
+      expect(x.measures![0]).toBeGreaterThanOrEqual(0);
+    }
   }, 60_000);
 });

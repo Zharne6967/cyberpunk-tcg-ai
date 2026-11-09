@@ -363,6 +363,10 @@ export interface CoachAdvice {
   moves: CoachMove[];
   /** Your next moves this turn after the best one, as the coach expects them. */
   plan: string[];
+  /** Why the best move: the table by your next turn compared with the next option (averages of the simulations). */
+  why: { text: string; good: boolean }[];
+  /** The option the explanation compares with (its label). */
+  whyVs: string | null;
   iterations: number;
   ms: number;
 }

@@ -39,6 +39,8 @@ export interface RootStat {
   visits: number;
   /** Sum of playout values from the bot's point of view. */
   value: number;
+  /** Averages of the caller's measures over the positions this move's playouts ended in. */
+  measures?: number[];
 }
 
 /** One step of the most visited line of the tree (who acts, what). */
@@ -66,6 +68,8 @@ interface Edge {
   value: number;
   avail: number;
   node: TreeNode;
+  /** Root edges only: sums of the measures of playout end positions. */
+  sums?: number[];
 }
 
 interface TreeNode {
@@ -91,6 +95,8 @@ export function ismctsSearch(
   options: Partial<IsmctsOptions>,
   seed: string,
   remembered: Iterable<string> = [],
+  /** Optional: measure each playout's end position; averaged per root move (RootStat.measures). */
+  measure?: (s: MatchState) => number[],
 ): SearchResult {
   const t0 = performance.now();
   const opts = { ...DEFAULT_ISMCTS, ...options, playout: { ...DEFAULT_PLAYOUT, ...options.playout } };
@@ -190,7 +196,14 @@ export function ismctsSearch(
       if (!moved) break;
     }
 
-    const value = playout(s, viewer, opts.playout, rand, previousActive);
+    let end = s;
+    const value = playout(s, viewer, opts.playout, rand, previousActive, measure ? (e) => (end = e) : undefined);
+    const first = path[0];
+    if (measure && first) {
+      const m = measure(end);
+      first.sums ??= new Array<number>(m.length).fill(0);
+      m.forEach((v, i) => (first.sums![i]! += v));
+    }
     for (const e of path) {
       e.visits++;
       e.value += value;
@@ -200,7 +213,7 @@ export function ismctsSearch(
   const stats: RootStat[] = [];
   rootActions.forEach((a, i) => {
     const e = root.edges.get(`${viewer as string}|${rootKeys[i]!}`);
-    if (e) stats.push({ key: rootKeys[i]!, action: a, visits: e.visits, value: e.value });
+    if (e) stats.push({ key: rootKeys[i]!, action: a, visits: e.visits, value: e.value, ...(e.sums && e.visits ? { measures: e.sums.map((x) => x / e.visits) } : {}) });
   });
   const line: LineStep[] = [];
   for (let node: TreeNode = root; line.length < 10; ) {
