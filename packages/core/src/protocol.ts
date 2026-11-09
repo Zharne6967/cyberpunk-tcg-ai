@@ -224,3 +224,116 @@ export interface ShareInfo {
   available: boolean;
   error?: string;
 }
+
+// ---- Deck analysis (POST /api/analyze → job, GET /api/analyze/:id → progress and report)
+
+/** What a deck is made of (cards only, no simulation). */
+export interface DeckProfile {
+  size: number;
+  units: number;
+  gears: number;
+  programs: number;
+  averageCost: number;
+  /** Main-deck cards per cost 0…6, last entry 7+. */
+  curve: number[];
+  /** Cards with the Sell tag. */
+  sellable: number;
+  /** Units costing 2 or less. */
+  earlyUnits: number;
+  /** Cards costing 5 or more. */
+  highCost: number;
+  blockers: number;
+  goSolo: number;
+  averageUnitPower: number;
+  colors: string[];
+}
+
+export interface WinRate {
+  games: number;
+  wins: number;
+  /** wins / games (draws count as games). */
+  rate: number;
+  /** Wilson 95% interval. */
+  ci: [number, number];
+}
+
+export interface MatchupResult extends WinRate {
+  deckId: string;
+  deckName: string;
+  legends: string[];
+  averageTurns: number;
+}
+
+/** A card of the analysed deck: how its games go when it gets played. */
+export interface KeyCard {
+  slug: string;
+  /** Share of games in which the deck played it. */
+  playedIn: number;
+  whenPlayed: WinRate;
+  whenNotPlayed: WinRate;
+}
+
+/** A card of the opposing decks: the analysed deck's results when the rival played it. */
+export interface ThreatCard {
+  slug: string;
+  /** Opposing decks that contain it. */
+  decks: string[];
+  result: WinRate;
+  /** The analysed deck's expected win rate in the same games (from those matchups overall). */
+  expected: number;
+}
+
+export interface AnalysisFinding {
+  kind: "weakness" | "strength";
+  text: string;
+  /** Cards the finding is about (shown as images). */
+  cards?: string[];
+}
+
+export interface CounterDeck extends WinRate {
+  /** Win rate of the counter deck against the analysed deck. */
+  deckId: string;
+  deckName: string;
+  legends: string[];
+  /** Cards that hurt the analysed deck and fit this deck's Legends (not in it yet). */
+  techCards: string[];
+}
+
+export interface AnalysisReport {
+  /** The analysed deck (full list: it can be played against right away). */
+  deck: { id: string; name: string; legends: string[]; main: Record<string, number> };
+  /** Bot level used on both sides. */
+  bot: string;
+  gamesPerMatchup: number;
+  overall: WinRate;
+  profile: DeckProfile;
+  /** Average profile of the opposing decks. */
+  poolProfile: DeckProfile;
+  matchups: MatchupResult[];
+  goingFirst: WinRate;
+  goingSecond: WinRate;
+  /** Games split at the median length. */
+  medianTurns: number;
+  shortGames: WinRate;
+  longGames: WinRate;
+  averageTurnsWin: number;
+  averageTurnsLoss: number;
+  keyCards: KeyCard[];
+  threats: ThreatCard[];
+  findings: AnalysisFinding[];
+  /** How to beat the deck (short lines). */
+  plan: AnalysisFinding[];
+  counters: CounterDeck[];
+  ms: number;
+}
+
+export interface AnalysisJob {
+  id: string;
+  status: "queued" | "running" | "done" | "error";
+  done: number;
+  total: number;
+  /** Jobs ahead in the queue. */
+  position?: number;
+  report?: AnalysisReport;
+  error?: string;
+}

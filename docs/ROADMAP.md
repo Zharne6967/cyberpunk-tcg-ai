@@ -76,8 +76,8 @@ Do sprawdzenia przy okazji: ekran ładowania po uśpieniu serwera (po ~15 min be
   Kod: **prywatne repozytorium GitHub** (darmowe). Uwaga: GitHub Pages dla prywatnych repo wymaga płatnego planu,
   a serwera Node nie uruchomi — dlatego strona startowa na Cloudflare Pages i serwer na Render, oba darmowe i oba
   wdrażane z prywatnego repo. Sama strona ma adres publiczny, więc wejście chronione kluczem dostępu / kodem pokoju.
-- **Usuwanie talii wbudowanych z poziomu strony**: dziś usuwać można tylko własne (★); dodać „ukryj” dla talii
-  z `data/decks` (bez kasowania plików) albo przenoszenie ich do Twoich talii.
+- ✅ **Usuwanie talii wbudowanych z poziomu strony** (2026-11-09): Delete w Deck Builderze działa dla każdej talii;
+  wbudowana znika z Twoich list w tej przeglądarce, „Restore built-in decks (n)” przywraca.
 - **AI tworzy talie samo, na bazie mety**: import najczęściej granych talii (etap 7: tcgcontender, ripperdeck,
   choombattler/meta, exburst), regularne odświeżanie; AI ulepsza je (podmiany kart sprawdzane tysiącami
   symulacji, etap 8) i pisze przewodnik „jak na nią grać / jak ją kontrować” (łączy się z 5c).
@@ -88,13 +88,27 @@ Do sprawdzenia przy okazji: ekran ładowania po uśpieniu serwera (po ~15 min be
   Ten sam „trener” także w naszej aplikacji (podpowiedź najlepszego ruchu + wyjaśnienie, opcjonalnie w grze ze znajomym).
   Ryzyko techniczne: odczyt stanu z cudzej strony (DOM/WebSocket) bywa kruchy przy jej zmianach.
 
-## Etap 5c — Analiza talii rywala i kontr-talia (prośba gracza, plan)
-Wklejasz talię (lista/ID) → raport: (1) słabości — krzywa, Eddies/sprzedaż, RAM, zależność od kluczowych
-kart, wyniki symulacji vs pula talii (`pnpm bench` po stronie serwera, ISMCTS), w których dopasowaniach przegrywa
-i dlaczego (statystyki z partii: tempo, Gigi, defeat kluczowych jednostek); (2) jak ją kontrować — konkretne
-karty/strategie, które w symulacjach najbardziej obniżają jej win rate; (3) proponowana talia przeciw niej —
-najlepsza z istniejących + warianty z deck buildera (zamiana kart, weryfikacja tysiącami symulacji, etap 8).
-Pierwszy krok: endpoint `POST /api/analyze` uruchamiający gauntlet w puli wątków + ekran raportu.
+## Etap 5c — Analiza talii rywala i kontr-talia
+✅ Wersja 1 (2026-11-09): ekran **Deck Analysis** (`#/analyze`, przycisk w lobby i „Analyze” w Deck Builderze).
+Wybierasz zapisaną talię, wklejasz listę albo bierzesz niezapisaną talię z Deck Buildera; talia gra z każdą
+talią wbudowaną (4/8/16 partii na parę, miejsca zamieniane, boty Easy po obu stronach). Raport:
+- **Weaknesses / Strengths** — najgorsze i najlepsze dopasowania, krzywa / karty do sprzedaży / tanie Jednostki /
+  [BLOCKER] w porównaniu z resztą talii, zależność od kluczowych kart, długie vs krótkie partie, gra jako drugi,
+  karty rywali, przeciw którym wyraźnie przegrywa (porównane z oczekiwanym wynikiem danego dopasowania);
+- **How to beat it** — najlepsza talia przeciw niej, karty, z którymi sobie nie radzi, karty do zbicia w
+  pierwszej kolejności, plan tempa, kto ma zaczynać;
+- **Counter decks** — 3 najlepsze talie z puli + „Cards to add” (groźne dla niej karty pasujące do RAM-u Legend
+  kontr-talii), przycisk **Play it vs this deck** (grasz kontr-talią, bot analizowaną talią);
+- **Matchups**, **Key cards** (wynik, gdy karta zagrana / niezagrana), **Deck profile** z krzywą.
+Technicznie: `packages/ai/src/match.ts` (partia bot–bot ze statystyką kart, wersja generatora nieblokująca
+serwera), `packages/ai/src/analysis.ts` (plan gauntletu + raport), `apps/server/src/analysis.ts` (kolejka zadań,
+`POST /api/analyze`, `GET /api/analyze/:id`; w domu wątki, online w głównym procesie w krótkich porcjach).
+Czas: 136 partii ≈ 12 s na jednym wątku, 272 partie ≈ 8 s na 4 wątkach. CLI: `pnpm analyze --deck <id> --games 8`.
+
+Do zrobienia:
+1. Silniejsze boty w symulacjach (opcja „Normal”/„Very Hard” w domu; Easy gra prosto, wyniki to przybliżenie).
+2. Warianty kontr-talii: podmiany kart sprawdzane symulacjami (etap 8), zapis jako Twoja talia.
+3. Pula przeciwników: także Twoje talie i meta z sieci (etap 7).
 
 ## Etap 5b — Gra ze znajomym i telefon (stan 2026-11-08)
 Zrobione: lobby „vs Bot / vs Friend” + imię; pokój (`POST /api/rooms`) → poczekalnia z linkiem

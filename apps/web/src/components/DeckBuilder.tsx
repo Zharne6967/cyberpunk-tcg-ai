@@ -4,6 +4,7 @@ import { COLOR_NAME, TYPE_NAME, api, loadCardDb, type CardData, type CardDb } fr
 import { matchesQuery } from "../cardQuery.ts";
 import { CardFace } from "./CardFace.tsx";
 import { Inspector } from "./Panels.tsx";
+import { HANDOFF_KEY } from "./Analysis.tsx";
 
 const TYPES = ["legend", "unit", "gear", "program"] as const;
 const COLORS = ["red", "blue", "green", "yellow"] as const;
@@ -298,6 +299,21 @@ export function DeckBuilder({ deckId }: { deckId?: string }) {
         <span className="spacer" />
         <button className="btn small" onClick={() => setModal("export")}>
           Export
+        </button>
+        <button
+          className="btn small"
+          disabled={!check?.legal}
+          onClick={() => {
+            if (summary && !dirty) return void (location.hash = `#/analyze/${deck.id}`);
+            try {
+              sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(deck));
+            } catch {
+              /* ignore */
+            }
+            location.hash = "#/analyze/builder";
+          }}
+        >
+          Analyze
         </button>
         <button className="btn small" disabled={!check?.legal || dirty} onClick={playWith}>
           Play

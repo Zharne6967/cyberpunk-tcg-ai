@@ -1,4 +1,4 @@
-import type { BotSummary, DeckCheck, DeckData, DeckSummary, NewGameRequest, RoomInfo, SeatTicket, ShareInfo } from "@cpai/core/protocol";
+import type { AnalysisJob, BotSummary, DeckCheck, DeckData, DeckSummary, NewGameRequest, RoomInfo, SeatTicket, ShareInfo } from "@cpai/core/protocol";
 
 export interface CardData {
   id: string;
@@ -99,9 +99,14 @@ export const api = {
   },
   importDeck: (text: string, name?: string) => getJson<{ deck: DeckData; unresolved: { line: string; name: string }[] }>("/api/decks/import", json("POST", { text, name })),
   bots: () => getJson<BotSummary[]>("/api/bots"),
-  newGame: async (req: NewGameRequest) => {
+  /** Deck analysis: a saved deck, deck data (Deck Builder) or a pasted list; the job is polled. */
+  analyze: async (req: { deckId?: string; deck?: DeckData; deckText?: string; games: number }) =>
+    getJson<AnalysisJob>("/api/analyze", json("POST", { games: req.games, ...(req.deck ? { deck: req.deck } : req.deckText ? { deckText: req.deckText } : await deckRef(req.deckId ?? "")) })),
+  analysisJob: (id: string) => getJson<AnalysisJob>(`/api/analyze/${encodeURIComponent(id)}`),
+  /** botDeckData: play against a deck that is not saved (e.g. an analysed list). */
+  newGame: async (req: NewGameRequest & { botDeckData?: DeckData }) => {
     const you = await deckRef(req.yourDeck);
-    const bot = await deckRef(req.botDeck);
+    const bot = req.botDeckData ? { deck: req.botDeckData } : await deckRef(req.botDeck);
     return getJson<SeatTicket>("/api/games", json("POST", { ...req, ...(you.deck ? { yourDeckData: you.deck } : {}), ...(bot.deck ? { botDeckData: bot.deck } : {}) })).then(rememberSeat);
   },
   gameExists: (id: string) => getJson<{ gameId: string; mode: string; started: boolean }>(`/api/games/${id}`),

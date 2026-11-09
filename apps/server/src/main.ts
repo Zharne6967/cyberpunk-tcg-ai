@@ -7,6 +7,7 @@ import { checkDeckLegality, isDeckLegal, type Deck } from "@cpai/core";
 import type { BotSummary, ClientMessage, NewGameRequest, RoomInfo, SeatTicket } from "@cpai/core/protocol";
 import { checkDeck, deleteUserDeck, getDeck, importDeckText, isUserDeck, loadAllDecks, sanitizeDeck, saveUserDeck, summarizeDeck } from "./decks.ts";
 import { botPool } from "./bot-pool.ts";
+import { AnalysisBusy, GAMES_PER_MATCHUP, analysisJob, startAnalysis } from "./analysis.ts";
 import { GameSession, games, roomByCode } from "./game.ts";
 import { getCardImage } from "./images.ts";
 import { isAuthorized, isRemote, keyLogin, shareStatus, startShare, stopShare } from "./share.ts";
@@ -76,8 +77,11 @@ const LANDING_URL = (() => {
 
 /** Room-code lookups per address and minute (codes must not be guessable by brute force). */
 const codeTries = new Map<string, { n: number; t: number }>();
+function clientIp(req: IncomingMessage): string {
+  return String(req.headers["cf-connecting-ip"] ?? req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0]!.trim();
+}
 function tooManyCodeTries(req: IncomingMessage): boolean {
-  const ip = String(req.headers["cf-connecting-ip"] ?? req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0]!.trim();
+  const ip = clientIp(req);
   const now = Date.now();
   const e = codeTries.get(ip);
   if (!e || now - e.t > 60_000) {
@@ -186,6 +190,22 @@ const server = createServer(async (req, res) => {
       const game = GameSession.vsBot(you, bot, body.bot ?? "tactical", body.seed, body.name?.trim() || "You");
       games.set(game.id, game);
       return sendJson(res, 200, ticket(game, "p1"));
+    }
+    // ---- deck analysis (gauntlet against the built-in decks, polled by the page)
+    if (p === "/api/analyze" && req.method === "POST") {
+      const body = (await readBody(req)) as { deckId?: string; deck?: unknown; deckText?: string; deckName?: string; games?: number };
+      const deck = playerDeck(body);
+      const perMatchup = (GAMES_PER_MATCHUP as readonly number[]).includes(Number(body.games)) ? Number(body.games) : 8;
+      try {
+        return sendJson(res, 200, startAnalysis(deck, perMatchup, clientIp(req)));
+      } catch (e) {
+        if (e instanceof AnalysisBusy) return sendJson(res, 429, { error: e.message });
+        throw e;
+      }
+    }
+    if (p.startsWith("/api/analyze/") && req.method === "GET") {
+      const job = analysisJob(p.slice("/api/analyze/".length));
+      return job ? sendJson(res, 200, job) : sendJson(res, 404, { error: "This analysis is no longer available (was the server restarted?)" });
     }
     if (p.startsWith("/api/games/") && req.method === "GET") {
       const g = games.get(p.slice("/api/games/".length));

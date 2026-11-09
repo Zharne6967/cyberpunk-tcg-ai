@@ -182,9 +182,14 @@ export function Lobby() {
         <h1>
           CYBERPUNK <span>TCG</span> // AI
         </h1>
-        <a className="btn" href="#/builder">
-          Deck Builder
-        </a>
+        <span className="lobby-links">
+          <a className="btn" href="#/analyze">
+            Deck Analysis
+          </a>
+          <a className="btn" href="#/builder">
+            Deck Builder
+          </a>
+        </span>
       </header>
       {error && <div className="banner error">{error}</div>}
       <section className="panel lobby-card">

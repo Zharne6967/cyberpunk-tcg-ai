@@ -5,3 +5,5 @@ export * from "./ismcts/determinize.ts";
 export * from "./ismcts/playout.ts";
 export * from "./ismcts/evaluation.ts";
 export * from "./ismcts/search.ts";
+export * from "./match.ts";
+export * from "./analysis.ts";

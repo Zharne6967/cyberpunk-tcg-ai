@@ -25,6 +25,11 @@ export function loadAllDecks(): Deck[] {
   return [...readDir(BUILTIN_DIR).filter((d) => !ids.has(d.id)), ...user];
 }
 
+/** Built-in decks only (the opponents of a deck analysis). */
+export function loadBuiltinDecks(): Deck[] {
+  return readDir(BUILTIN_DIR).sort((a, b) => a.id.localeCompare(b.id));
+}
+
 export function getDeck(id: string): Deck | undefined {
   return loadAllDecks().find((d) => d.id === id);
 }
