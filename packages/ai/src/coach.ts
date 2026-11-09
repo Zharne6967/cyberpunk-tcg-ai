@@ -4,7 +4,7 @@ import { coachKey, type CoachAdvice, type CoachMove, type MatchView } from "@cpa
 import { actorOf, applyAction, legalActions, type Action } from "./ismcts/actions.ts";
 import { determinize, informationSet } from "./ismcts/determinize.ts";
 import { ismctsSearch, rankStats } from "./ismcts/search.ts";
-import { decideBotCommand, ensureRegistry } from "./decide.ts";
+import { ensureRegistry } from "./decide.ts";
 import { buildNameIndex, labelAction } from "./labels.ts";
 
 /**
@@ -151,6 +151,8 @@ export interface CoachOptions {
   iterations: number;
   timeMs: number;
   seed: string;
+  /** Rank only these moves (coachKey), e.g. the targets of an attack the player already declared on another site. */
+  only?: string[];
 }
 
 /** Search the player's world: the 3 best moves with estimated win chances, and the rest of the turn's plan. */
@@ -163,16 +165,23 @@ export function coachAdvice(cw: CoachWorld, opts: CoachOptions): CoachAdvice {
     const l = describe(world, viewer, a);
     return { key: coachKey(a.move, a.args), move: a.move, ...(a.args ? { args: a.args } : {}), label: l.label, cardId: l.cardId, targetId: l.targetId, visits, winRate };
   };
-  // Opening hand and first player: the bots' own heuristics (short playouts say little there).
-  if (world.G.gamePhase === "setup") {
-    const d = decideBotCommand(world, cw.viewer, "greedy", opts.seed);
-    return { stateID: cw.stateID, moves: d ? [move(d, 1, null)] : [], plan: [], why: [], whyVs: null, iterations: 0, ms: performance.now() - t0 };
-  }
-  const result = ismctsSearch(world, viewer, { iterations: opts.iterations, timeMs: opts.timeMs }, opts.seed, cw.remembered, tableMeasures(cw.viewer));
+  // Opening hand and first player: every playout plays both players' first two turns (the next turn alone
+  // says little about a hand) and only the root options are compared (no deeper tree: more samples each).
+  const setup = world.G.gamePhase === "setup";
+  const result = ismctsSearch(
+    world,
+    viewer,
+    { iterations: opts.iterations, timeMs: opts.timeMs, ...(setup ? { maxDepth: 1, playout: { turns: 2, maxSteps: 400 } } : {}) },
+    opts.seed,
+    cw.remembered,
+    tableMeasures(cw.viewer),
+  );
   // Copies of the same card are separate commands with the same label: show each move once.
   const moves: CoachMove[] = [];
   const measures: (number[] | undefined)[] = [];
-  for (const r of rankStats(result.stats)) {
+  const allowed = opts.only?.length ? new Set(opts.only) : null;
+  const ranked = rankStats(result.stats).filter((r) => !allowed || allowed.has(coachKey(r.action.move, r.action.args)));
+  for (const r of ranked) {
     const m = move(r.action, r.visits, result.trivial ? null : r.visits ? r.value / r.visits : null);
     if (moves.some((x) => x.label === m.label)) continue;
     moves.push(m);

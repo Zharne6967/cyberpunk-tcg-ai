@@ -124,11 +124,93 @@ describe("cyberpunk-tcg-sim.online snapshot → engine (extension coach)", () =>
     expect(allowed.map((id) => r.state.G.gigDice[id]!.dieType).sort()).toEqual(["d4", "d6"]);
   });
 
-  it("choices on the site: says whose choice it is instead of advising", () => {
+  it("choices on the site: yours are advised, the rival's are waited for", () => {
     const s = fixture("solo-main-t3");
-    expect(simDecision({ ...s, controls: { pending: { type: "gig_increase_choice", stepLabel: "CHOOSE GIG", actorId: "player1" } } })).toEqual({ kind: "wait", reason: "Your choice: Choose gig" });
+    expect(simDecision({ ...s, controls: { pending: { type: "gig_increase_choice", stepLabel: "CHOOSE GIG", actorId: "player1" } } })).toEqual({ kind: "choice", label: "Choose gig" });
     expect(simDecision({ ...s, controls: { pending: { type: "defense", stepLabel: "CHOOSE RESPONSE", actorId: "player2" } } })).toEqual({ kind: "wait", reason: "Rival is choosing" });
   });
+
+  // Recorded in a Play Vs AI game (2026-11-09): who goes first, the opening hand, Afterparty at Lizzie's.
+  const live = JSON.parse(readFileSync(new URL("./fixtures/setup-and-choice.json", import.meta.url), "utf8")) as Record<"order" | "mulligan" | "main" | "choice", SimSnapshot>;
+  const moves = (r: ReturnType<typeof convertSimSnapshot>) => (r.ok ? legalActions(r.state, r.viewer).map((a) => a.move).sort() : []);
+
+  it("who goes first: your choice between going first and second", () => {
+    expect(simDecision(live.order)).toEqual({ kind: "order" });
+    const r = convertSimSnapshot(live.order, "t");
+    expect(moves(r)).toEqual(["resolveFirstPlayer", "resolveFirstPlayer"]);
+  });
+
+  it("opening hand: keep or mulligan exactly the hand the site shows", () => {
+    expect(simDecision(live.mulligan)).toEqual({ kind: "mulligan" });
+    const r = convertSimSnapshot(live.mulligan, "t");
+    expect(moves(r)).toEqual(["keepHand", "mulligan"]);
+    if (!r.ok) return;
+    const catalog = getCatalog().engineCatalog;
+    const hand = r.state.G.players.p1!.zones.hand.map((id) => catalog.get(r.state.G.cardIndex[id as string]!.definitionId)!.slug).sort();
+    expect(hand).toEqual(live.mulligan.players!.player1!.hand!.map((c) => c.cardId!.replace(/_/g, "-")).sort());
+    expect(r.state.G.players.p1!.zones.deck.length + hand.length).toBe(40);
+    // The other player's turn to decide: nothing for you yet.
+    expect(simDecision({ ...live.mulligan, controls: { ...live.mulligan.controls, canKeepOpeningHand: false, canMulligan: false } })).toEqual({ kind: "wait", reason: "Rival decides on the opening hand" });
+  });
+
+  it("a choice from your card: replayed from your last Main Phase, then the coach ranks the options", () => {
+    expect(convertSimSnapshot(live.choice, "t")).toEqual({ ok: false, reason: "Your choice: Choose gig" });
+    const r = convertSimSnapshot(live.choice, "t", [live.main]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.state.G.turnMetadata.pendingChoice?.chooserId).toBe("p1");
+    expect(moves(r)).toContain("resolveAdjustGig");
+    const advice = coachAdvice({ stateID: 0, viewer: "p1", world: r.state, remembered: [] }, { iterations: 120, timeMs: 3000, seed: "t" });
+    expect(advice.moves.length).toBeGreaterThan(1);
+    expect(advice.moves.some((m) => /Adjust|adjustment/.test(m.label))).toBe(true);
+  });
+
+  // Turn 5 of the same game: Delamain Cab attacks; the site asks for the target, then which Gig to steal.
+  const atk = JSON.parse(readFileSync(new URL("./fixtures/attack-choices.json", import.meta.url), "utf8")) as { mainT5: SimSnapshot; attackTargetPending: object; stealPending: object };
+  const mainT5 = { ...atk.mainT5, room: { ...atk.mainT5.room, deckSelections: live.main.room!.deckSelections } } as SimSnapshot;
+  const withPending = (pending: object, patch: (s: SimSnapshot) => void = () => {}) => {
+    const s = structuredClone(mainT5);
+    s.controls = { pending: pending as never, primaryActions: [] };
+    patch(s);
+    return s;
+  };
+
+  it("attack target: the coach ranks only this attacker's attacks", () => {
+    const r = convertSimSnapshot(withPending(atk.attackTargetPending), "t", [mainT5]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.only?.length).toBe(2);
+    expect(r.only!.every((k) => /^attack(Rival|Unit)/.test(k))).toBe(true);
+    const advice = coachAdvice({ stateID: 0, viewer: "p1", world: r.state, remembered: [] }, { iterations: 200, timeMs: 4000, seed: "t", only: r.only });
+    expect(advice.moves.length).toBe(2);
+    expect(advice.moves.every((m) => m.move === "attackRival" || m.move === "attackUnit")).toBe(true);
+  });
+
+  it("which Gig to steal: the attack is replayed through the rival letting it in", () => {
+    const steal = withPending(atk.stealPending, (s) => {
+      s.game!.turnStep = "attack";
+      const cab = s.players!.player1!.field![0]!;
+      cab.exhausted = true;
+      cab.effects = ["spent"];
+    });
+    const r = convertSimSnapshot(steal, "t", [mainT5]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.only).toBeUndefined();
+    expect(r.state.G.turnMetadata.pendingChoice?.chooserId).toBe("p1");
+    const options = legalActions(r.state, r.viewer);
+    expect(options.length).toBe(2);
+    const advice = coachAdvice({ stateID: 0, viewer: "p1", world: r.state, remembered: [] }, { iterations: 200, timeMs: 4000, seed: "t" });
+    expect(advice.moves.length).toBe(2);
+  });
+
+  it("the opening hand gets win chances from playouts", () => {
+    const r = convertSimSnapshot(live.mulligan, "t");
+    if (!r.ok) throw new Error(r.reason);
+    const advice = coachAdvice({ stateID: 0, viewer: "p1", world: r.state, remembered: [] }, { iterations: 60, timeMs: 5000, seed: "t" });
+    expect(advice.moves.map((m) => m.label).sort()).toEqual(["Keep", "Mulligan"]);
+    expect(advice.moves.every((m) => m.winRate !== null)).toBe(true);
+  }, 30_000);
 
   it("explains when it cannot help", () => {
     expect(convertSimSnapshot({ ...snap, game: { ...snap.game, activePlayerId: "player2" } })).toEqual({ ok: false, reason: "Rival's turn" });

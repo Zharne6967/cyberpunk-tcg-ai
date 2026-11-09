@@ -9,16 +9,18 @@
  */
 import { LocalEngine, createMatchState, createPlayerId, recomputeActiveEffects, type MatchState, type PlayerId } from "@tcg/cyberpunk-engine";
 import { getCatalog, toEngineDeckList, type Deck } from "@cpai/core";
+import { coachKey } from "@cpai/core/protocol";
 import { decideBotCommand, ensureRegistry } from "../decide.ts";
-import { actorOf, legalActions } from "../ismcts/actions.ts";
+import { actorOf, applyAction, legalActions, type Action } from "../ismcts/actions.ts";
 
 export * from "./ctcg-sim-rules.ts";
-import { simDecision, type SimCard, type SimSnapshot } from "./ctcg-sim-rules.ts";
+import { simDecision, type SimCard, type SimPending, type SimSnapshot } from "./ctcg-sim-rules.ts";
 
 // ---- conversion
 
 export type SimConversion =
-  | { ok: true; state: MatchState; viewer: PlayerId; simIdOf: Map<string, string> }
+  /** only: the coach ranks just these moves (coachKey) — the site asks which of them, e.g. the attack's target. */
+  | { ok: true; state: MatchState; viewer: PlayerId; simIdOf: Map<string, string>; only?: string[] }
   | { ok: false; reason: string };
 
 const catalog = () => getCatalog();
@@ -43,6 +45,117 @@ function deckFrom(sel: { deckLegendIds?: string[]; deckCardQuantities?: Record<s
     main[slug] = (main[slug] ?? 0) + n;
   }
   return { id, name: id, legends: legends as string[], main };
+}
+
+/** A fresh game with both lists, stopped at the first-player choice — made by p1 (you): the engine picks the chooser from the seed. */
+function freshState(d1: Deck, d2: Deck, seed: string): LocalEngine {
+  let engine: LocalEngine | null = null;
+  for (let k = 0; k < 32; k++) {
+    engine = new LocalEngine(
+      createMatchState({
+        players: [
+          { id: createPlayerId("p1"), name: "p1" },
+          { id: createPlayerId("p2"), name: "p2" },
+        ],
+        catalog: catalog().engineCatalog,
+        deckLists: [toEngineDeckList(d1, "p1"), toEngineDeckList(d2, "p2")],
+        seed: k ? `${seed}-${k}` : seed,
+      }),
+    );
+    if ((actorOf(engine.getState())?.pid as string | undefined) === "p1") break;
+  }
+  return engine!;
+}
+
+const run = (engine: LocalEngine, pid: string, a: Action, n: number) =>
+  engine.processCommand({ commandID: `conv-${n}`, move: a.move as never, input: a.args ? { args: a.args } : undefined }, pid as PlayerId).success;
+
+/**
+ * The opening-hand decision: first player as on the site, the rival's decision made if it came first,
+ * your hand exactly as the site shows it (the rest of your list is the deck, in any order).
+ */
+function setupState(snap: SimSnapshot, d1: Deck, d2: Deck, me: string, rival: string, seed: string): SimConversion {
+  const engine = freshState(d1, d2, seed);
+  const viewer = createPlayerId("p1");
+  const goFirst = snap.game?.firstPlayerId === me;
+  const order = legalActions(engine.getState(), viewer).find((a) => a.move === "resolveFirstPlayer" && (a.args as { goFirst?: boolean } | undefined)?.goFirst === goFirst);
+  if (!order || !run(engine, "p1", order, 0)) return { ok: false, reason: "Could not set up the game" };
+  // The rival went first and has decided: keep (their hand is hidden either way).
+  if (!goFirst) {
+    const keep = legalActions(engine.getState(), createPlayerId("p2")).find((a) => a.move === "keepHand");
+    if (!keep || !run(engine, "p2", keep, 1)) return { ok: false, reason: "Could not set up the game" };
+  }
+  const st = structuredClone(engine.getState());
+  const ps = st.G.players.p1!;
+  const mine = [...ps.zones.hand, ...ps.zones.deck] as string[];
+  const hand: string[] = [];
+  const simIdOf = new Map<string, string>();
+  for (const c of snap.players?.[me]?.hand ?? []) {
+    const slug = c.cardId ? simSlug(c.cardId) : undefined;
+    const def = slug ? catalog().bySlug(slug) : undefined;
+    const id = def ? mine.find((x) => !hand.includes(x) && st.G.cardIndex[x]!.definitionId === def.id) : undefined;
+    if (!id) return { ok: false, reason: "Unknown card in your hand" };
+    hand.push(id);
+    if (c.id) simIdOf.set(id, c.id);
+  }
+  const deck = mine.filter((x) => !hand.includes(x));
+  for (const id of hand) st.G.cardIndex[id]!.zone = "hand" as never;
+  for (const id of deck) st.G.cardIndex[id]!.zone = "deck" as never;
+  ps.zones.hand = hand as never;
+  ps.zones.deck = deck as never;
+  const turn = actorOf(st);
+  if (!turn || (turn.pid as string) !== "p1") return { ok: false, reason: "Rival decides on the opening hand" };
+  void rival;
+  return { ok: true, state: st, viewer, simIdOf };
+}
+
+/** Rival moves that would change the attack (a Blocker, a Quick card): never assumed. */
+const PLAYS = new Set(["useBlocker", "playCard", "activateAbility", "callLegend", "sellCard", "goSolo"]);
+
+/** Does this action name the engine card (in any argument)? */
+const mentions = (a: Action, id: string) => JSON.stringify(a.args ?? {}).includes(`"${id}"`);
+
+/**
+ * A choice from a card effect: the site does not say how it was reached, so the move is replayed from
+ * the last decision before it — the same card, played or used in our engine, must open a choice of
+ * yours. Earlier snapshots are tried too (the site may send a few updates in between).
+ */
+function choiceState(pending: SimPending, previous: SimSnapshot[], seed: string): SimConversion | null {
+  const source = pending.sourceCard?.id;
+  if (!source) return null;
+  // The site splits one of our moves in two (attack → its target, Gear → its host): rank those moves.
+  const splitMove = /attack_target|equip|attach|host/i.test(pending.type ?? "");
+  let fallback: SimConversion | null = null;
+  for (const prev of previous) {
+    const conv = convertSimSnapshot(prev, seed);
+    if (!conv.ok) continue;
+    const engineId = [...conv.simIdOf].find(([, sim]) => sim === source)?.[0];
+    if (!engineId) continue;
+    const candidates = legalActions(conv.state, conv.viewer).filter((x) => mentions(x, engineId));
+    const asRoot = candidates.length > 1 ? { ...conv, only: candidates.map((a) => coachKey(a.move, a.args)) } : null;
+    if (splitMove && asRoot) return asRoot;
+    fallback ??= asRoot;
+    for (const a of candidates) {
+      let next = applyAction(conv.state, conv.viewer, a);
+      // Up to the choice: your forced steps, and the rival letting an attack through (the site shows
+      // your choice, so the attack went on — e.g. which Gig to steal).
+      for (let step = 0; next && step < 8; step++) {
+        const turn = actorOf(next);
+        if (!turn) break;
+        const options = legalActions(next, turn.pid);
+        if (turn.pid === conv.viewer) {
+          if (next.G.turnMetadata.pendingChoice && options.length > 1) return { ok: true, state: next, viewer: conv.viewer, simIdOf: conv.simIdOf };
+          if (options.length !== 1 || !next.G.attackState) break;
+          next = applyAction(next, turn.pid, options[0]!);
+        } else {
+          const pass = options.find((o) => o.move === "passPhase") ?? options.find((o) => o.move === "resolveAttack") ?? options.find((o) => !PLAYS.has(o.move));
+          if (!pass || !next.G.attackState) break;
+          next = applyAction(next, turn.pid, pass);
+        }
+      }
+    }
+  }
+  return fallback;
 }
 
 /** Set a game up with both lists and play the setup with the greedy bot (any finished setup will do). */
@@ -89,7 +202,7 @@ const defaultMeta = () => ({
  * Rebuild the viewer's decision point in our engine. Supported: the viewer's Main Phase (no choice or
  * attack in progress) and the Start Phase Gig roll. Anything else returns a reason instead.
  */
-export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim"): SimConversion {
+export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim", previous: SimSnapshot[] = []): SimConversion {
   ensureRegistry();
   const me = snap.self?.playerId ?? undefined;
   const game = snap.game ?? {};
@@ -99,11 +212,17 @@ export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim"): SimCon
   if (!me || !rival || !players[me] || !players[rival]) return { ok: false, reason: "No game in progress" };
   const decision = simDecision(snap);
   if (decision.kind === "wait") return { ok: false, reason: decision.reason };
-  const phase = decision.kind;
+  if (decision.kind === "choice") {
+    const pending = (typeof snap.controls?.pending === "object" ? snap.controls.pending : null) ?? {};
+    return choiceState(pending, previous, seed) ?? { ok: false, reason: `Your choice: ${decision.label}` };
+  }
 
   const d1 = deckFrom(snap.room?.deckSelections?.[me], "you");
   const d2 = deckFrom(snap.room?.deckSelections?.[rival], "rival");
   if (!d1 || !d2) return { ok: false, reason: "Deck lists are not visible in this game" };
+  if (decision.kind === "order") return { ok: true, state: structuredClone(freshState(d1, d2, seed).getState()), viewer: createPlayerId("p1"), simIdOf: new Map() };
+  if (decision.kind === "mulligan") return setupState(snap, d1, d2, me, rival, seed);
+  const phase = decision.kind;
   const s = baseState(d1, d2, seed);
   if (!s) return { ok: false, reason: "Could not set up the game" };
 

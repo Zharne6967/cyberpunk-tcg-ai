@@ -38,14 +38,28 @@ function trimmed(s: Json): Json | null {
   for (const [pid, d] of Object.entries(selections)) if (d) decks[pid] = { deckLegendIds: d.deckLegendIds, deckCardQuantities: d.deckCardQuantities };
   const self = (s.self ?? {}) as Json;
   const controls = (s.controls ?? {}) as Json;
+  const pending = controls.pending as Json | null | undefined;
+  const source = (pending?.sourceCard ?? null) as Json | null;
   return {
     room: { ...flags, deckSelections: decks },
     self: { playerId: self.playerId ?? null, role: self.role ?? null, isSpectator: self.isSpectator ?? false },
     game: clean(game),
     players: clean(players),
     controls: {
-      pending: controls.pending ? { type: String((controls.pending as Json).type ?? ""), stepLabel: String((controls.pending as Json).stepLabel ?? ""), actorId: String((controls.pending as Json).actorId ?? "") } : null,
+      pending: pending
+        ? {
+            type: String(pending.type ?? ""),
+            stepLabel: String(pending.stepLabel ?? ""),
+            actorId: String(pending.actorId ?? ""),
+            prompt: String(pending.prompt ?? ""),
+            sourceCard: source ? { id: String(source.id ?? ""), cardId: String(source.cardId ?? "") } : null,
+            options: Array.isArray(pending.actions) ? (pending.actions as Json[]).map((a) => String(a.label ?? "")) : [],
+          }
+        : null,
       primaryActions: Array.isArray(controls.primaryActions) ? (controls.primaryActions as Json[]).map((a) => String(a.type ?? "")) : [],
+      canChooseTurnOrder: controls.canChooseTurnOrder === true,
+      canKeepOpeningHand: controls.canKeepOpeningHand === true,
+      canMulligan: controls.canMulligan === true,
     },
   };
 }

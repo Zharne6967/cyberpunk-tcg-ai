@@ -67,13 +67,38 @@ export interface SimSnapshot {
     winnerId?: string | null;
   };
   players?: Record<string, SimPlayer>;
-  /** pending: the site's open choice (type, label, who decides); primaryActions: action types such as "end_turn". */
-  controls?: { pending?: { type?: string; stepLabel?: string; actorId?: string } | boolean | null; primaryActions?: string[] };
+  /**
+   * pending: the site's open choice (type, label, who decides, the card it comes from, the option labels);
+   * primaryActions: action types such as "end_turn"; the can… flags: the choices before the first turn.
+   */
+  controls?: {
+    pending?: SimPending | boolean | null;
+    primaryActions?: string[];
+    canChooseTurnOrder?: boolean;
+    canKeepOpeningHand?: boolean;
+    canMulligan?: boolean;
+  };
 }
 
-export type SimDecision = { kind: "main" | "start" } | { kind: "wait"; reason: string };
+export interface SimPending {
+  type?: string;
+  stepLabel?: string;
+  actorId?: string;
+  prompt?: string;
+  sourceCard?: { id?: string; cardId?: string } | null;
+  /** The site's buttons for this choice ("PLUS", "TARGET FRIENDLY D4 4"…). */
+  options?: string[];
+}
 
-/** Is it your decision that the coach covers: your Main Phase, or the Gig roll that starts your turn? */
+/**
+ * main / start: your Main Phase or the Gig roll; order: go first or second; mulligan: keep or mulligan
+ * the opening hand; choice: a choice of yours from a card effect (the coach replays the move that led to it).
+ */
+export type SimDecision = { kind: "main" | "start" | "order" | "mulligan" } | { kind: "choice"; label: string } | { kind: "wait"; reason: string };
+
+const choiceLabel = (p: SimPending) => (p.stepLabel ? `${p.stepLabel.charAt(0)}${p.stepLabel.slice(1).toLowerCase()}` : "Your choice on the board");
+
+/** Is it a decision of yours that the coach covers? */
 export function simDecision(snap: SimSnapshot): SimDecision {
   const g = snap.game ?? {};
   const me = snap.self?.playerId;
@@ -83,8 +108,11 @@ export function simDecision(snap: SimSnapshot): SimDecision {
   if (pending) {
     const p = typeof pending === "object" ? pending : {};
     if (p.actorId && p.actorId !== me) return { kind: "wait", reason: "Rival is choosing" };
-    return { kind: "wait", reason: p.stepLabel ? `Your choice: ${p.stepLabel.charAt(0)}${p.stepLabel.slice(1).toLowerCase()}` : "Your choice on the board" };
+    return { kind: "choice", label: choiceLabel(p) };
   }
+  if (g.stage === "turn_order_selection") return snap.controls?.canChooseTurnOrder ? { kind: "order" } : { kind: "wait", reason: "Rival chooses who goes first" };
+  if (g.stage === "opening_hand_selection")
+    return snap.controls?.canKeepOpeningHand || snap.controls?.canMulligan ? { kind: "mulligan" } : { kind: "wait", reason: "Rival decides on the opening hand" };
   if (g.stage !== "player_turn") return { kind: "wait", reason: "Waiting for the game to start" };
   if (g.activePlayerId !== me) return { kind: "wait", reason: "Rival's turn" };
   if (g.turnStep === "ready_roll") return { kind: "start" };

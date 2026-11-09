@@ -14,19 +14,19 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 let n = 0;
-chrome.runtime.onMessage.addListener((msg: { type?: string; snapshot?: unknown }, _sender: unknown, sendResponse: (r: unknown) => void) => {
+chrome.runtime.onMessage.addListener((msg: { type?: string; snapshot?: unknown; previous?: unknown[] }, _sender: unknown, sendResponse: (r: unknown) => void) => {
   if (msg?.type === "ping") {
     sendResponse({ ok: true, version: chrome.runtime.getManifest().version });
     return;
   }
   if (msg?.type !== "advise") return;
   try {
-    const r = convertSimSnapshot(msg.snapshot as never, "ext");
+    const r = convertSimSnapshot(msg.snapshot as never, "ext", (msg.previous ?? []) as never);
     if (!r.ok) {
       sendResponse({ ok: false, reason: r.reason });
       return;
     }
-    const advice = coachAdvice({ stateID: 0, viewer: r.viewer as string, world: r.state, remembered: [] }, { iterations: 1000, timeMs: 2500, seed: `ext-${++n}` });
+    const advice = coachAdvice({ stateID: 0, viewer: r.viewer as string, world: r.state, remembered: [] }, { iterations: 1000, timeMs: 2500, seed: `ext-${++n}`, only: r.only });
     sendResponse({ ok: true, advice });
   } catch (err) {
     sendResponse({ ok: false, reason: "The coach could not read this position" });

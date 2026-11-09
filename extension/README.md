@@ -32,11 +32,17 @@ Kliknij ikonę wtyczki (na stronie gry). Okienko pokazuje:
   Regulamin strony zabrania pomocy z zewnątrz w meczach, które się liczą („cheats … to manipulate matches,
   rankings … or tournament results”), a gra z obcymi przeciwnikami ma być uczciwa.
 
-## Co umie (wersja 0.1.3)
+## Co umie (wersja 0.1.4)
+- **Kto zaczyna** („Go first” / „Go second”) i **ręka startowa** („Keep” / „Mulligan”): każda opcja z szansą na
+  wygraną z symulacji dwóch pierwszych tur obu graczy (przy małej różnicy obie opcje są podobnie dobre).
 - Twoja **Main Phase** (zagranie, sprzedaż, Call a Legend, atak, Pass Turn) — także po atakach w tej samej turze —
   i **wybór kości Giga** na początku tury (tylko kości, którymi strona pozwala rzucić).
-- Gdy strona czeka na wybór (cel efektu, kradzież Giga, React Step), okienko pisze, czyj to wybór:
-  „Your choice: …” albo „Rival is choosing” — podpowiedzi do tych wyborów jeszcze nie ma.
+- **Wybory z efektów Twoich kart i ataków**: np. który Gig i o ile zmienić (Afterparty at Lizzie's), cel ataku
+  („Rival Gig area” albo Jednostka), który Gig ukraść. Wtyczka odtwarza w naszym silniku Twój ostatni ruch z Main
+  Phase, który do tego wyboru doprowadził, i liczy każdą opcję. Strona dzieli niektóre wybory na kroki (np. Gig →
+  PLUS/MINUS → ile) — podpowiedź opisuje cały wybór naraz (np. „Adjust: D4 (4) → 3”).
+- Wybory, których nie da się tak odtworzyć (np. efekt karty rywala, React Step), nadal tylko opisuje:
+  „Your choice: …” albo „Rival is choosing”.
 - Nie czyta jeszcze efektów „do końca tury” z kart programów — wtedy podpowiedź jest przybliżona.
 - 0.1.2: ocena pozycji z self-play (mocniejsze podpowiedzi). 0.1.3: Coach jest włączony, dopóki go nie wyłączysz
   (przycisk i okienko zawsze zgodne), okienko nie może zostać poza ekranem, diagnostyka w przycisku wtyczki.

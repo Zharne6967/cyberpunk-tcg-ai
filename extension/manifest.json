@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Cyberpunk TCG Coach",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Learning coach for cyberpunk-tcg-sim.online: the best move from what you know. Off in Quick Play, public lobbies, Ranked and tournaments.",
   "minimum_chrome_version": "111",
   "permissions": ["storage"],

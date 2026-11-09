@@ -112,6 +112,9 @@ let shown = "";
 let running = false;
 let queued: { key: string; snap: SimSnapshot } | null = null;
 
+/** Your last Main Phase / Start Phase positions, newest first: a choice from a card effect is replayed from them. */
+let history: SimSnapshot[] = [];
+
 async function ask(key: string, snap: SimSnapshot) {
   if (running) {
     queued = { key, snap };
@@ -119,8 +122,9 @@ async function ask(key: string, snap: SimSnapshot) {
   }
   running = true;
   let r: { ok?: boolean; advice?: Advice; reason?: string } | undefined;
+  const previous = simDecision(snap).kind === "choice" ? history : [];
   try {
-    r = await chrome.runtime.sendMessage({ type: "advise", snapshot: snap });
+    r = await chrome.runtime.sendMessage({ type: "advise", snapshot: snap, previous });
   } catch {
     r = { ok: false, reason: "Reload the page to use the coach" };
   }
@@ -150,6 +154,8 @@ function update() {
     return render();
   }
   const decision = simDecision(snapshot);
+  if (decision.kind === "main" || decision.kind === "start") history = [snapshot, ...history.filter((h) => h !== snapshot)].slice(0, 4);
+  else if (decision.kind !== "choice") history = [];
   if (decision.kind === "wait") {
     wanted = "";
     view = { kind: "waiting", text: decision.reason };
