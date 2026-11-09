@@ -8,13 +8,16 @@ import type { Deck } from "@cpai/core";
 import type { AnalysisReport } from "@cpai/core/protocol";
 import { buildReport, planGauntlet } from "./analysis.ts";
 import { doctorOpponents, proposeSwaps } from "./doctor.ts";
+import { labBreed, labSeed } from "./lab.ts";
 import { playMatch, type MatchOutcome } from "./match.ts";
 
 export type AnalysisWorkerIn =
   | { type: "play"; job?: number; target: Deck; pool: Deck[]; perMatchup: number; shard: number; shards: number; seed?: string; bot?: string }
   | { type: "report"; job?: number; target: Deck; pool: Deck[]; perMatchup: number; outcomes: (MatchOutcome | null)[]; ms: number }
   | { type: "propose"; job?: number; deck: Deck; opponents: Deck[]; outcomes: (MatchOutcome | null)[]; cuts: number; adds: number }
-  | { type: "opponents"; job?: number; target: Deck; pool: Deck[] };
+  | { type: "opponents"; job?: number; target: Deck; pool: Deck[] }
+  | { type: "labSeed"; job?: number; pool: Deck[]; count: number; seed: string; keep?: string[]; values?: Record<string, number> }
+  | { type: "labBreed"; job?: number; parents: Deck[]; pool: Deck[]; count: number; seed: string; keep?: string[]; values?: Record<string, number> };
 
 export type AnalysisWorkerOut =
   | { type: "plan"; job?: number; total: number }
@@ -23,6 +26,7 @@ export type AnalysisWorkerOut =
   | { type: "report"; job?: number; report: AnalysisReport }
   | { type: "proposed"; job?: number; variants: { out: string; in: string; copies: number; deck: Deck }[] }
   | { type: "opponents"; job?: number; opponents: Deck[] }
+  | { type: "decks"; job?: number; decks: Deck[] }
   | { type: "error"; job?: number; message: string };
 
 const ctx = self as unknown as { onmessage: ((e: { data: AnalysisWorkerIn }) => void) | null; postMessage(m: AnalysisWorkerOut): void };
@@ -32,6 +36,14 @@ ctx.onmessage = ({ data }) => {
   try {
     if (data.type === "propose") {
       ctx.postMessage({ type: "proposed", job, variants: proposeSwaps(data.deck, data.opponents, data.outcomes, data.cuts, data.adds) });
+      return;
+    }
+    if (data.type === "labSeed") {
+      ctx.postMessage({ type: "decks", job, decks: labSeed(data) });
+      return;
+    }
+    if (data.type === "labBreed") {
+      ctx.postMessage({ type: "decks", job, decks: labBreed(data) });
       return;
     }
     if (data.type === "opponents") {

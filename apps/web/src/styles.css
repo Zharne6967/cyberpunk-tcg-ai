@@ -582,3 +582,18 @@ a { color: var(--cyan); }
   .pick-cards { gap: 6px; }
   .pick-card .card-face.md { width: min(27vw, 30vh); }
 }
+
+/* Deck Lab */
+.lab-deck { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.lab-deck h2 { margin: 0; }
+.lab-deck h3 { margin: 6px 0 4px; }
+.lab-deck .up, .lab-verdict.up { color: #5ad18a; }
+.lab-deck .down { color: #ff6b6b; }
+.lab-verdict { font-size: 13px; margin-top: 4px; }
+.lab-list { display: flex; flex-direction: column; gap: 8px; }
+.lab-cards { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.lab-card { display: inline-flex; align-items: center; gap: 6px; }
+.lab-pool { margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+.lab-pool summary { cursor: pointer; }
+.lab-history { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.lab-select { background: #101014; color: inherit; border: 1px solid var(--line); border-radius: 3px; padding: 3px 6px; max-width: 100%; }

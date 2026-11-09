@@ -10,14 +10,42 @@ Każdy etap to osobna sesja pracy, zakończona działającą wersją i paczką Z
 | 4 | Stół jak na żywo | rewersy kart, ukryte własne Legendy (zgodnie z CR), losowanie pierwszego gracza w okienku, przeciąganie kart na strefy, tryb „bez podpowiedzi” | 🔶 wersja 1 gotowa |
 | 5 | Deck builder | panel składania talii: wyszukiwarka i filtry kart, legalność na żywo, krzywa/kolory, zapis/eksport/import listy | 🔶 wersja 1 gotowa |
 | 5b | Gra ze znajomym + telefon | pokoje z linkiem zaproszenia (człowiek–człowiek, każdy widzi tylko swoje karty), klucz dostępu dla urządzeń z zewnątrz, Cloudflare quick tunnel z poziomu poczekalni, przeciąganie palcem, podgląd karty po najechaniu / przytrzymaniu, układ na telefon | 🔶 wersja 1 (patrz niżej) |
-| 6 | Uczenie się | zapis każdej partii, nocny self-play, strojenie oceny pozycji, „bramka” (nowa wersja musi pokonać starą), raport czego się nauczył, model Twojego stylu gry | |
-| 7 | Talie z sieci | importery (tcgcontender, ripperdeck, choombattler, exburst, tekst), snapshot mety, gauntlet, analiza talii w UI (krzywa, Eddies, aggro, tempo kluczowych kart) | |
-| 8 | AI deck builder | generowanie talii + weryfikacja tysiącami symulacji vs meta, wyjaśnienia wyborów | |
+| 6 | Uczenie się | zapis każdej partii, nocny self-play, strojenie oceny pozycji, „bramka” (nowa wersja musi pokonać starą), raport czego się nauczył, model Twojego stylu gry | 🔶 self-play + bramka działają (patrz niżej) |
+| 7 | Talie z sieci | importery (tcgcontender, ripperdeck, choombattler, exburst, tekst), snapshot mety, gauntlet, analiza talii w UI (krzywa, Eddies, aggro, tempo kluczowych kart) | 🔶 pula meta + dodawanie list; automat zablokowany regulaminami (niżej) |
+| 8 | AI deck builder | generowanie talii + weryfikacja tysiącami symulacji vs meta, wyjaśnienia wyborów | 🔶 Deck Lab wersja 1 |
 | 9 | Asystent zasad i trener | czat (Claude API lub Ollama), RAG po zasadach/FAQ/kartach, analiza partii po meczu, podpowiedzi w trakcie gry (tylko w trybie nauki) | |
 | 10 | Szlify | tryb offline, aktualizacja kart z nowych dodatków, instrukcja | |
 
 > Kolejność 4–5 wynika z uwag po pierwszej partii (2026-11-08): najpierw stół ma wyglądać i działać jak prawdziwa
 > karcianka, potem własne talie. Uczenie się bota przesunięte na etap 6.
+
+## Etapy 6–8 — self-play, pula meta, Deck Lab (2026-11-09)
+**Mocniejszy bot.** Pomiar (docs/BENCHMARK.md): Hard bije Easy tylko 59%, ISMCTS z 40 symulacjami na ruch bije
+Hard 84% (8–16 symulacji: 62%). Nowy bot symulacyjny `ismcts-sim` („Strong (simulations)”, 40 symulacji, bez limitu
+czasu — wynik nie zależy od komputera). **Self-play**: `pnpm selfplay` — 600 partii ISMCTS vs ISMCTS, nowa ocena
+pozycji (log loss 0.506 vs 0.530), **bramka** 74/128 = 57.8% nowego modelu vs stary → wdrożony (wpływa na Very Hard,
+Master, Coacha i wtyczkę). `MatchSpec.record` zapisuje pozycje z początku tury; `playout.model` pozwala testować
+kandydatów.
+
+**Deck Lab** (`#/lab`, przycisk w lobby i w Deck Analysis; CLI `pnpm lab`): bot sam wymyśla talie.
+Generacja 0 = trio Legend z puli przebudowane przez Lab + losowe trio; Main Deck z kart, na które Legendy mają
+kolor i RAM (punkty: popularność w talii puli tych kolorów, wartości kart wyuczone z partii, prosta heurystyka,
+losowość), kształt 40 kart (≤24 Jednostki, ≤9 kart za 5+). Każda generacja: wszystkie talie grają z pulą
+(talie z puli też się ścigają, na równych zasadach), wartości kart liczone na nowo z wszystkich partii (wynik
+gdy karta zagrana vs nie, w tej samej talii), najlepsze się rozmnażają (inne karty / inna Legenda / nowa budowa).
+Finaliści grają dodatkowe partie. Cel: **Best average** albo **Beat every deck** (najsłabsze dopasowanie, dolna
+granica przedziału). Raport: wynik, *Strong against*, *Loses to*, wszystkie dopasowania, lista kart, *Save as a
+new deck*, **Check with Strong bots** (`ismcts-sim`, 4 partie na rywala). Kod: `packages/ai/src/lab.ts` (karty),
+`lab-loop.ts` (pętla bez danych kart), `apps/web/src/browserAnalysis.ts` (`labInBrowser`, `checkInBrowser`),
+`apps/web/src/components/Lab.tsx`.
+
+**Pula meta** = `data/decks/meta-*`, `rogue-ai-*` + talie dodane przez gracza („Meta pool” → *Add to the meta pool*,
+w przeglądarce, `apps/web/src/metaPool.ts`; używa jej też Deck Doctor). Dodane 2026-11-09 z ChoomBattler
+(ranked, Core BO1, 30 dni, Standard lists): Dexter/Padre/V (62.8%), Adam/Saburo/V (58.9%), Adam/Dexter/Padre (64.9%).
+**Automatyczne pobieranie mety: nie** — tcgcontender.com („Using any robot, spider…”) i ripperdeck.gg („automated
+means… without our prior written consent”) zabraniają botów w regulaminach; ChoomBattler daje dane mety przez
+swoje wewnętrzne API (masowe pobieranie z niego zablokował wcześniej klasyfikator uprawnień). Droga: zgoda
+ChoomBattlera (contact@choombattler.ch / Discord) albo ręczne odświeżanie (czytanie stron jak użytkownik).
 
 ## Etap 4 — Stół jak na żywo
 Cel: grasz jak przy prawdziwym stole — sam pamiętasz, co możesz zrobić; system tylko pilnuje zasad.

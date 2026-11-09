@@ -4,6 +4,7 @@ import { Game } from "./components/Game.tsx";
 import { DeckBuilder } from "./components/DeckBuilder.tsx";
 import { JoinRoom } from "./components/Rooms.tsx";
 import { Analysis } from "./components/Analysis.tsx";
+import { Lab } from "./components/Lab.tsx";
 
 function useHashRoute() {
   const [hash, setHash] = useState(() => location.hash);
@@ -25,5 +26,6 @@ export function App() {
   if (builder) return <DeckBuilder deckId={builder[1]} />;
   const analyze = /^#\/analyze(?:\/([\w-]+))?/.exec(hash);
   if (analyze) return <Analysis key={analyze[1] ?? ""} deckId={analyze[1]} />;
+  if (hash.startsWith("#/lab")) return <Lab />;
   return <Lobby />;
 }

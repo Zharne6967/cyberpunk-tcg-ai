@@ -10,3 +10,5 @@ export * from "./analysis.ts";
 export * from "./labels.ts";
 export * from "./coach.ts";
 export * from "./doctor.ts";
+export * from "./lab.ts";
+export * from "./lab-loop.ts";

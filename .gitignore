@@ -8,3 +8,4 @@ coverage/
 .env
 .env.*
 extension/*.zip
+tools/sim/selfplay-samples.json

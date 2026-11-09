@@ -41,6 +41,14 @@ export const STRATEGIES: Record<string, BotInfo> = {
     description: "Simulates hundreds of game continuations (ISMCTS). Does not see your cards. ~1 s per move.",
     inLobby: true,
   },
+  "ismcts-sim": {
+    kind: "ismcts",
+    ismcts: { iterations: 40 },
+    fair: true,
+    label: "Strong (simulations)",
+    description: "ISMCTS with 40 simulations per move and no time limit: the same result on every computer. Wins about 84% against Hard.",
+    inLobby: false,
+  },
   ismcts: {
     kind: "ismcts",
     ismcts: { iterations: 1200, timeMs: 6000 },

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import type { AnalysisFinding, AnalysisJob, AnalysisReport, DeckData, DeckProfile, DeckSummary, WinRate } from "@cpai/core/protocol";
 import { api, loadCardDb, type CardDb } from "../api.ts";
 import { analyzeInBrowser, confirmInBrowser, doctorInBrowser } from "../browserAnalysis.ts";
-import { isMetaDeck, type Confirmation, type DoctorOptions, type DoctorReport } from "../browserAnalysis.ts";
+import type { Confirmation, DoctorOptions, DoctorReport } from "../browserAnalysis.ts";
+import { addedMetaDecks, metaPool } from "../metaPool.ts";
 import { CardFace } from "./CardFace.tsx";
 import { DeckPicker } from "./Lobby.tsx";
 
@@ -43,7 +44,7 @@ function lobbyBot(): string {
 }
 
 /** Card image; the full card after a short hover, or a long press on touch screens. */
-function Thumb({ db, slug, size = "xs" }: { db: CardDb; slug: string; size?: "xs" | "sm" }) {
+export function Thumb({ db, slug, size = "xs" }: { db: CardDb; slug: string; size?: "xs" | "sm" }) {
   const [preview, setPreview] = useState<{ rect: DOMRect; touch: boolean } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const card = db.bySlug.get(slug);
@@ -90,7 +91,7 @@ function Thumb({ db, slug, size = "xs" }: { db: CardDb; slug: string; size?: "xs
   );
 }
 
-function Rate({ r }: { r: WinRate }) {
+export function Rate({ r }: { r: WinRate }) {
   return (
     <span className="an-rate" title={`95% interval ${pct(r.ci[0])}–${pct(r.ci[1])}`}>
       <span className="an-bar">
@@ -611,8 +612,8 @@ export function Analysis({ deckId }: { deckId?: string }) {
     setDoctor({ status: "running", text: "Starting", done: 0, total: 1 });
     try {
       const all = await api.analysisPool();
-      const meta = all.filter(isMetaDeck);
-      const pool = against === "meta" && meta.length >= 3 ? meta : all;
+      const meta = metaPool(all);
+      const pool = against === "meta" && meta.length >= 3 ? meta : [...all, ...addedMetaDecks()];
       const report = await doctorInBrowser(deck, pool, DEPTHS[depth], (text, done, total) => !ctl.signal.aborted && setDoctor({ status: "running", text, done, total }), ctl.signal);
       setDoctor({ status: "done", report });
     } catch (e) {
@@ -637,9 +638,14 @@ export function Analysis({ deckId }: { deckId?: string }) {
           </a>
         </h1>
         <span className="an-title">Deck Analysis</span>
-        <a className="btn" href="#/builder">
-          Deck Builder
-        </a>
+        <span className="lobby-links">
+          <a className="btn" href="#/lab">
+            Deck Lab
+          </a>
+          <a className="btn" href="#/builder">
+            Deck Builder
+          </a>
+        </span>
       </header>
       {error && <div className="banner error">{error}</div>}
       <section className="panel an-input">

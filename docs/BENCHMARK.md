@@ -68,3 +68,23 @@ A = `ismcts` `{}`, B = `masterful`
 | Overwatch — Recharge Control vs Johnny — Fight, Ready and Steal | 2/2 |
 | Red/Yellow/Blue — Low-Cost Tempo vs Dexter / Dum Dum / River — Gear Aggro (Top 16) | 2/2 |
 | The Heist Starter Deck vs Relic + Placide — Surgical Reanimation | 2/2 |
+
+## Self-play: nowa ocena pozycji (2026-11-09)
+`pnpm selfplay --games 600 --iters 40`: 600 partii ISMCTS (40 symulacji na ruch) przeciw sobie na wszystkich
+taliach, 6973 pozycje z początku tury, regresja logistyczna jak w `pnpm calibrate`. Na odłożonych pozycjach z
+partii z wyszukiwaniem: stary model (uczony na partiach Easy) log loss 0.5304 / trafność 72.1%, nowy 0.5056 / 73.5%.
+
+**Bramka** (ISMCTS 40 z nowym modelem vs ISMCTS 40 ze starym, te same talie i ziarna, miejsca zamieniane):
+seria `gate1` 38/64 = 59.4%, seria `gate2` 36/64 = 56.3%, **razem 74/128 = 57.8%** (95% CI 49–66%,
+jednostronnie z = 1.77, p ≈ 0.04). Nowy model zastąpił `packages/ai/src/ismcts/eval-model.json`.
+
+## Małe budżety ISMCTS vs Hard (2026-11-09, `--seed s1`, 32 partie)
+| A | A wygrywa | ms/decyzję A (15 partii naraz) |
+|---|---|---|
+| Hard vs Easy | 19/32 = 59.4% | 98 |
+| ISMCTS 8 vs Hard | 20/32 = 62.5% | 94 |
+| ISMCTS 16 vs Hard | 20/32 = 62.5% | 173 |
+| **ISMCTS 40 vs Hard** | **27/32 = 84.4%** | 416 |
+| ISMCTS 100 vs Hard | 27/32 = 84.4% | 933 |
+
+Stąd bot symulacyjny `ismcts-sim` („Strong (simulations)”): 40 symulacji na ruch, bez limitu czasu.

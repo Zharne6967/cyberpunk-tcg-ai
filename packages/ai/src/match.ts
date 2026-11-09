@@ -2,6 +2,7 @@ import { LocalEngine, createMatchState, createPlayerId, filterMatchView, type Ma
 import { getCatalog, toEngineDeckList, type Deck } from "@cpai/core";
 import { actorOf } from "./ismcts/actions.ts";
 import { KnowledgeTracker } from "./ismcts/determinize.ts";
+import { positionFeatures } from "./ismcts/evaluation.ts";
 import type { IsmctsOptions } from "./ismcts/search.ts";
 import { decideBotCommand, ensureRegistry } from "./decide.ts";
 import { getBot } from "./strategies.ts";
@@ -18,6 +19,8 @@ export interface MatchSpec {
   /** Per-side ISMCTS overrides (benchmarks compare budgets). */
   ismctsA?: Partial<IsmctsOptions>;
   ismctsB?: Partial<IsmctsOptions>;
+  /** Record the board features of the player whose turn starts (self-play training data). */
+  record?: boolean;
 }
 
 export type EndReason = "winCondition" | "deckOut" | "concede" | "stuck" | "illegal" | "repeatedState" | "maxSteps";
@@ -48,6 +51,8 @@ export interface MatchOutcome {
   aFirst: boolean;
   cardsA: SideCards;
   cardsB: SideCards;
+  /** With `record`: features at each turn start and whether that player won. */
+  positions?: { x: number[]; won: number }[];
 }
 
 const PLAY_MOVES: Record<string, string> = { playCard: "cardId", resolveCardToPlay: "cardId", callLegend: "legendId" };
@@ -90,6 +95,8 @@ export function* matchSteps(spec: MatchSpec): Generator<void, MatchOutcome> {
     return def ? (catalog.engineCatalog.get(def)?.slug ?? def) : undefined;
   };
   const seen = new Map<string, number>();
+  const recorded: { pid: string; x: number[] }[] = [];
+  let lastActive = "";
   const maxSteps = spec.maxSteps ?? 3000;
   let rejected = 0;
   let reason: EndReason | null = null;
@@ -103,6 +110,13 @@ export function* matchSteps(spec: MatchSpec): Generator<void, MatchOutcome> {
     if (state.G.gameEnded) break;
     if (!firstPlayer && state.G.gamePhase !== "setup") firstPlayer = state.G.turnMetadata.activePlayerId as string;
     for (const t of Object.values(trackers)) t?.observe(state);
+    if (spec.record && state.G.gamePhase !== "setup") {
+      const active = state.G.turnMetadata.activePlayerId as string;
+      if (active !== lastActive) {
+        lastActive = active;
+        recorded.push({ pid: active, x: positionFeatures(filterMatchView(state, active as PlayerId), active) });
+      }
+    }
     const turn = actorOf(state);
     if (!turn) {
       reason = "stuck";
@@ -187,6 +201,7 @@ export function* matchSteps(spec: MatchSpec): Generator<void, MatchOutcome> {
     aFirst: firstPlayer === ta,
     cardsA: cards(ta),
     cardsB: cards(tb),
+    ...(spec.record && final.G.winnerId ? { positions: recorded.map((r) => ({ x: r.x, won: r.pid === final.G.winnerId ? 1 : 0 })) } : {}),
   };
 }
 

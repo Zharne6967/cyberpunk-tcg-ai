@@ -1,8 +1,9 @@
 import type { AnalysisReport, DeckData } from "@cpai/core/protocol";
 import { confirmDecks, doctorLoop, isMetaDeck, type Confirmation, type DoctorOptions, type DoctorReport } from "../../../packages/ai/src/doctor-loop.ts";
+import { labLoop, opponentsOf, wilsonCi, type LabOptions, type LabReport, type Matchup } from "../../../packages/ai/src/lab-loop.ts";
 
 export { isMetaDeck };
-export type { Confirmation, DoctorOptions, DoctorReport };
+export type { Confirmation, DoctorOptions, DoctorReport, LabOptions, LabReport, Matchup };
 
 /** Messages of packages/ai/src/browser-worker.ts (kept here so the page does not type-check the engine). */
 type WorkerOut =
@@ -83,8 +84,8 @@ export async function analyzeInBrowser(
 
 // ---- Deck Doctor: card swaps tested in simulations on this device (same workers for the whole run).
 
-type Outcome = { winner: "A" | "B" | "draw" };
-type DoctorMsg = { type: string; job?: number; total?: number; index?: number; outcome?: Outcome | null; variants?: { out: string; in: string; copies: number; deck: DeckData }[]; opponents?: DeckData[]; message?: string };
+type Outcome = { winner: "A" | "B" | "draw"; cardsA: { played: string[] } };
+type DoctorMsg = { type: string; job?: number; total?: number; index?: number; outcome?: Outcome | null; variants?: { out: string; in: string; copies: number; deck: DeckData }[]; opponents?: DeckData[]; decks?: DeckData[]; message?: string };
 
 /** Workers kept for a whole job: single answers (`ask`) and gauntlets split over all of them (`play`). */
 function workerPool(signal: AbortSignal) {
@@ -207,6 +208,75 @@ export async function confirmInBrowser(
       bot,
       "verify",
     );
+  } finally {
+    stop();
+  }
+}
+
+// ---- Deck Lab: new decks from scratch, raced against the pool on this device.
+
+export async function labInBrowser(
+  pool: DeckData[],
+  options: Partial<LabOptions>,
+  onProgress: (text: string, done: number, total: number) => void,
+  signal: AbortSignal,
+): Promise<LabReport<DeckData>> {
+  const { ask, play, stop } = workerPool(signal);
+  const keep = options.keep ?? [];
+  try {
+    return await labLoop<DeckData, Outcome>(
+      pool,
+      (d, opp, per, seed) => play(d, opp, per, seed),
+      {
+        seed: (count, seed, values) => ask({ type: "labSeed", pool, count, seed, keep, values }, (m) => (m.type === "decks" ? m.decks : undefined)),
+        breed: (parents, count, seed, values) => ask({ type: "labBreed", parents, pool, count, seed, keep, values }, (m) => (m.type === "decks" ? m.decks : undefined)),
+      },
+      options,
+      onProgress,
+    );
+  } finally {
+    stop();
+  }
+}
+
+export interface Checked {
+  deckId: string;
+  wins: number;
+  games: number;
+  rate: number;
+  ci: [number, number];
+  matchups: Matchup[];
+}
+
+/** Decks against the pool with another bot (e.g. the Strong simulation bot): slow, seconds per game. */
+export async function checkInBrowser(
+  decks: DeckData[],
+  pool: DeckData[],
+  perMatchup: number,
+  bot: string,
+  onProgress: (done: number, total: number) => void,
+  signal: AbortSignal,
+): Promise<Checked[]> {
+  const { play, stop } = workerPool(signal);
+  const per = Math.max(2, Math.floor(perMatchup / 2) * 2);
+  const total = decks.reduce((s, d) => s + opponentsOf(d, pool).length * per, 0);
+  let before = 0;
+  try {
+    const out: Checked[] = [];
+    for (const d of decks) {
+      const opps = opponentsOf(d, pool);
+      const games = await play(d, opps, per, "check", bot, (done) => onProgress(before + done, total));
+      before += games.length;
+      const matchups = opps.map((o, i) => {
+        const slice = games.slice(i * per, (i + 1) * per).filter((g): g is Outcome => !!g);
+        const wins = slice.filter((g) => g.winner === "A").length;
+        return { opponent: o.id, name: o.name, legends: o.legends, wins, games: slice.length, rate: slice.length ? wins / slice.length : 0, ci: wilsonCi(wins, slice.length) };
+      });
+      const wins = matchups.reduce((s, m) => s + m.wins, 0);
+      const n = matchups.reduce((s, m) => s + m.games, 0);
+      out.push({ deckId: d.id, wins, games: n, rate: n ? wins / n : 0, ci: wilsonCi(wins, n), matchups });
+    }
+    return out;
   } finally {
     stop();
   }

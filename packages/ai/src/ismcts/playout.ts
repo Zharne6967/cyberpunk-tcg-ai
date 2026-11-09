@@ -9,7 +9,7 @@ import {
   type PlayerPrompt,
 } from "@tcg/cyberpunk-engine";
 import { actorOf, applyAction, legalActions, type Action } from "./actions.ts";
-import { learnedWinProbability } from "./evaluation.ts";
+import { learnedWinProbability, type EvalModel } from "./evaluation.ts";
 
 export interface PlayoutOptions {
   /**
@@ -26,6 +26,8 @@ export interface PlayoutOptions {
   evalScale: number;
   /** "learned" = logistic model fitted on self-play (evaluation.ts); "board" = engine evaluateBoard. */
   evaluator: "learned" | "board";
+  /** Another learned model (self-play candidates are gated against the shipped one). */
+  model?: EvalModel;
 }
 
 export const DEFAULT_PLAYOUT: PlayoutOptions = { turns: 1, maxSteps: 80, epsilon: 0.1, evalScale: 610, evaluator: "learned" };
@@ -101,5 +103,5 @@ export function playout(start: MatchState, viewer: PlayerId, opts: PlayoutOption
     s = after;
   }
   onEnd?.(s);
-  return opts.evaluator === "board" ? boardWinProbability(s, viewer, opts.evalScale) : learnedWinProbability(s, viewer);
+  return opts.evaluator === "board" ? boardWinProbability(s, viewer, opts.evalScale) : learnedWinProbability(s, viewer, opts.model);
 }

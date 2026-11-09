@@ -1,0 +1,37 @@
+{
+  "id": "meta-cb-4r2g-adam-saburo-v",
+  "name": "4 Red / 2 Green — Adam Smasher · Saburo Arasaka · V",
+  "source": {
+    "kind": "choombattler-meta",
+    "url": "https://choombattler.com/meta/legends/cb-adam-smasher-ender-of-legends+cb-saburo-arasaka-stubborn-patriarch+cb-v-streetkid?queue=core-bo1&window=30d",
+    "date": "2026-11-09",
+    "note": "ChoomBattler ranked meta, Core BO1, last 30 days. Standard list for these Legends (2.7% of the field, 58.9% win rate over 801 games)."
+  },
+  "legends": [
+    "saburo-arasaka-stubborn-patriarch",
+    "v-streetkid",
+    "adam-smasher-ender-of-legends"
+  ],
+  "main": {
+    "field-operator": 1,
+    "valentino-street-racer": 1,
+    "6th-street-recruits": 2,
+    "maelstrom-zealots": 1,
+    "meredith-stout-stone-cold-corpo": 2,
+    "pepe-najarro-working-doubles": 2,
+    "maxtac-av": 1,
+    "animals-wrecker": 2,
+    "yorinobu-arasaka-steel-dragon": 3,
+    "mantis-blades": 3,
+    "riot-shield": 1,
+    "satori-sword-of-saburo": 3,
+    "detonate": 2,
+    "industrial-assembly": 2,
+    "peace-offering": 3,
+    "synapse-burnout": 2,
+    "bonnie-and-clyde": 2,
+    "over-the-edge": 1,
+    "memory-relapse": 3,
+    "carnage-at-the-colosseum": 3
+  }
+}

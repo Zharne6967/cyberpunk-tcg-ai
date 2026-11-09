@@ -183,6 +183,9 @@ export function Lobby() {
           CYBERPUNK <span>TCG</span> // AI
         </h1>
         <span className="lobby-links">
+          <a className="btn" href="#/lab">
+            Deck Lab
+          </a>
           <a className="btn" href="#/analyze">
             Deck Analysis
           </a>

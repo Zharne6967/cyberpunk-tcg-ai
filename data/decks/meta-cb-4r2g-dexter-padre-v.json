@@ -1,0 +1,37 @@
+{
+  "id": "meta-cb-4r2g-dexter-padre-v",
+  "name": "4 Red / 2 Green — Dexter DeShawn · Padre · V",
+  "source": {
+    "kind": "choombattler-meta",
+    "url": "https://choombattler.com/meta/legends/cb-dexter-deshawn-off-the-grid+cb-padre-man-of-the-cross+cb-v-streetkid?queue=core-bo1&window=30d",
+    "date": "2026-11-09",
+    "note": "ChoomBattler ranked meta, Core BO1, last 30 days. Standard list for these Legends (2.3% of the field, 62.8% win rate over 688 games)."
+  },
+  "legends": [
+    "dexter-deshawn-off-the-grid",
+    "padre-man-of-the-cross",
+    "v-streetkid"
+  ],
+  "main": {
+    "field-operator": 1,
+    "la-llorona-ghost-of-the-past": 1,
+    "valentino-street-racer": 1,
+    "6th-street-recruits": 3,
+    "meredith-stout-stone-cold-corpo": 1,
+    "pepe-najarro-working-doubles": 2,
+    "maxtac-av": 1,
+    "animals-wrecker": 2,
+    "nadia-fighting-through-grief": 1,
+    "yorinobu-arasaka-steel-dragon": 3,
+    "mantis-blades": 3,
+    "satori-sword-of-saburo": 3,
+    "detonate": 2,
+    "industrial-assembly": 2,
+    "peace-offering": 1,
+    "synapse-burnout": 3,
+    "bonnie-and-clyde": 3,
+    "over-the-edge": 1,
+    "memory-relapse": 3,
+    "carnage-at-the-colosseum": 3
+  }
+}
