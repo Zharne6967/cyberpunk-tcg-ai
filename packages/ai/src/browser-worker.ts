@@ -1,34 +1,49 @@
 /**
- * Deck analysis in the player's browser (Web Worker). The free online server has a fraction of one
- * core; the player's device has several. Every worker plans the same gauntlet (deterministic), plays the
- * games of its shard and posts each result; one worker then builds the report from all results.
+ * Deck analysis and Deck Doctor in the player's browser (Web Worker). The free online server has a
+ * fraction of one core; the player's device has several. Every worker plans the same gauntlet
+ * (deterministic), plays the games of its shard and posts each result; one worker builds the report or
+ * proposes the Doctor's card swaps. `job` ties answers to the request (the workers serve many in a row).
  */
 import type { Deck } from "@cpai/core";
 import type { AnalysisReport } from "@cpai/core/protocol";
 import { buildReport, planGauntlet } from "./analysis.ts";
+import { doctorOpponents, proposeSwaps } from "./doctor.ts";
 import { playMatch, type MatchOutcome } from "./match.ts";
 
 export type AnalysisWorkerIn =
-  | { type: "play"; target: Deck; pool: Deck[]; perMatchup: number; shard: number; shards: number }
-  | { type: "report"; target: Deck; pool: Deck[]; perMatchup: number; outcomes: (MatchOutcome | null)[]; ms: number };
+  | { type: "play"; job?: number; target: Deck; pool: Deck[]; perMatchup: number; shard: number; shards: number; seed?: string; bot?: string }
+  | { type: "report"; job?: number; target: Deck; pool: Deck[]; perMatchup: number; outcomes: (MatchOutcome | null)[]; ms: number }
+  | { type: "propose"; job?: number; deck: Deck; opponents: Deck[]; outcomes: (MatchOutcome | null)[]; cuts: number; adds: number }
+  | { type: "opponents"; job?: number; target: Deck; pool: Deck[] };
 
 export type AnalysisWorkerOut =
-  | { type: "plan"; total: number }
-  | { type: "outcome"; index: number; outcome: MatchOutcome | null }
-  | { type: "done" }
-  | { type: "report"; report: AnalysisReport }
-  | { type: "error"; message: string };
+  | { type: "plan"; job?: number; total: number }
+  | { type: "outcome"; job?: number; index: number; outcome: MatchOutcome | null }
+  | { type: "done"; job?: number }
+  | { type: "report"; job?: number; report: AnalysisReport }
+  | { type: "proposed"; job?: number; variants: { out: string; in: string; copies: number; deck: Deck }[] }
+  | { type: "opponents"; job?: number; opponents: Deck[] }
+  | { type: "error"; job?: number; message: string };
 
 const ctx = self as unknown as { onmessage: ((e: { data: AnalysisWorkerIn }) => void) | null; postMessage(m: AnalysisWorkerOut): void };
 
 ctx.onmessage = ({ data }) => {
+  const job = data.job;
   try {
-    const { specs, opponents } = planGauntlet(data.target, data.pool, data.perMatchup);
-    if (data.type === "report") {
-      ctx.postMessage({ type: "report", report: buildReport(data.target, opponents, specs, data.outcomes, data.ms) });
+    if (data.type === "propose") {
+      ctx.postMessage({ type: "proposed", job, variants: proposeSwaps(data.deck, data.opponents, data.outcomes, data.cuts, data.adds) });
       return;
     }
-    ctx.postMessage({ type: "plan", total: specs.length });
+    if (data.type === "opponents") {
+      ctx.postMessage({ type: "opponents", job, opponents: doctorOpponents(data.target, data.pool) });
+      return;
+    }
+    const { specs, opponents } = planGauntlet(data.target, data.pool, data.perMatchup, data.type === "play" ? (data.bot ?? "greedy") : "greedy", data.type === "play" ? (data.seed ?? "analysis") : "analysis");
+    if (data.type === "report") {
+      ctx.postMessage({ type: "report", job, report: buildReport(data.target, opponents, specs, data.outcomes, data.ms) });
+      return;
+    }
+    ctx.postMessage({ type: "plan", job, total: specs.length });
     for (let i = data.shard; i < specs.length; i += data.shards) {
       let outcome: MatchOutcome | null = null;
       try {
@@ -36,10 +51,10 @@ ctx.onmessage = ({ data }) => {
       } catch {
         /* one broken game must not stop the analysis */
       }
-      ctx.postMessage({ type: "outcome", index: i, outcome });
+      ctx.postMessage({ type: "outcome", job, index: i, outcome });
     }
-    ctx.postMessage({ type: "done" });
+    ctx.postMessage({ type: "done", job });
   } catch (err) {
-    ctx.postMessage({ type: "error", message: String((err as Error)?.message ?? err) });
+    ctx.postMessage({ type: "error", job, message: String((err as Error)?.message ?? err) });
   }
 };

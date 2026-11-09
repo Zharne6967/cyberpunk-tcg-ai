@@ -1,4 +1,8 @@
 import type { AnalysisReport, DeckData } from "@cpai/core/protocol";
+import { confirmDecks, doctorLoop, isMetaDeck, type Confirmation, type DoctorOptions, type DoctorReport } from "../../../packages/ai/src/doctor-loop.ts";
+
+export { isMetaDeck };
+export type { Confirmation, DoctorOptions, DoctorReport };
 
 /** Messages of packages/ai/src/browser-worker.ts (kept here so the page does not type-check the engine). */
 type WorkerOut =
@@ -73,6 +77,137 @@ export async function analyzeInBrowser(
     ]);
   } finally {
     signal.removeEventListener("abort", stop);
+    stop();
+  }
+}
+
+// ---- Deck Doctor: card swaps tested in simulations on this device (same workers for the whole run).
+
+type Outcome = { winner: "A" | "B" | "draw" };
+type DoctorMsg = { type: string; job?: number; total?: number; index?: number; outcome?: Outcome | null; variants?: { out: string; in: string; copies: number; deck: DeckData }[]; opponents?: DeckData[]; message?: string };
+
+/** Workers kept for a whole job: single answers (`ask`) and gauntlets split over all of them (`play`). */
+function workerPool(signal: AbortSignal) {
+  if (typeof Worker === "undefined") throw new Error("Web Workers are not available");
+  const threads = browserThreads();
+  const workers = Array.from({ length: threads }, () => new Worker(new URL("../../../packages/ai/src/browser-worker.ts", import.meta.url), { type: "module" }));
+  const terminate = () => workers.forEach((w) => w.terminate());
+  signal.addEventListener("abort", terminate);
+  let job = 0;
+  const failed = new Promise<never>((_, reject) => {
+    signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    for (const w of workers) w.addEventListener("error", (e) => reject(new Error(e.message || "The analysis worker failed")));
+  });
+  failed.catch(() => {});
+  /** One answer from the first worker. */
+  const ask = <T>(msg: Record<string, unknown>, pick: (d: DoctorMsg) => T | undefined): Promise<T> => {
+    const id = ++job;
+    const w = workers[0]!;
+    return Promise.race([
+      failed,
+      new Promise<T>((resolve, reject) => {
+        const on = ({ data }: MessageEvent<DoctorMsg>) => {
+          if (data.job !== id) return;
+          if (data.type === "error") return reject(new Error(data.message));
+          const v = pick(data);
+          if (v !== undefined) {
+            w.removeEventListener("message", on);
+            resolve(v);
+          }
+        };
+        w.addEventListener("message", on);
+        w.postMessage({ ...msg, job: id });
+      }),
+    ]);
+  };
+  /** A gauntlet split over all workers; `onGame` after every finished game. */
+  const play = (target: DeckData, opponents: DeckData[], perMatchup: number, seed: string, bot = "greedy", onGame?: (done: number, total: number) => void): Promise<(Outcome | null)[]> => {
+    const id = ++job;
+    const outcomes: (Outcome | null)[] = [];
+    let done = 0;
+    return Promise.race([
+      failed,
+      Promise.all(
+        workers.map(
+          (w, shard) =>
+            new Promise<void>((resolve, reject) => {
+              const on = ({ data }: MessageEvent<DoctorMsg>) => {
+                if (data.job !== id) return;
+                if (data.type === "plan" && !outcomes.length) outcomes.push(...new Array<Outcome | null>(data.total ?? 0).fill(null));
+                else if (data.type === "outcome") {
+                  outcomes[data.index!] = data.outcome ?? null;
+                  onGame?.(++done, outcomes.length);
+                } else if (data.type === "error") reject(new Error(data.message));
+                else if (data.type === "done") {
+                  w.removeEventListener("message", on);
+                  resolve();
+                }
+              };
+              w.addEventListener("message", on);
+              w.postMessage({ type: "play", job: id, target, pool: opponents, perMatchup, shard, shards: threads, seed, bot });
+            }),
+        ),
+      ).then(() => outcomes),
+    ]);
+  };
+  const stop = () => {
+    signal.removeEventListener("abort", terminate);
+    terminate();
+  };
+  return { ask, play, stop };
+}
+
+/** Deck Doctor on this device: weak cards, candidate swaps raced in simulations, the best kept. */
+export async function doctorInBrowser(
+  deck: DeckData,
+  pool: DeckData[],
+  options: Partial<DoctorOptions>,
+  onProgress: (text: string, done: number, total: number) => void,
+  signal: AbortSignal,
+): Promise<DoctorReport<DeckData>> {
+  const { ask, play, stop } = workerPool(signal);
+  try {
+    const opponents = await ask({ type: "opponents", target: deck, pool }, (d) => (d.type === "opponents" ? d.opponents : undefined));
+    return await doctorLoop<DeckData, Outcome>(
+      deck,
+      opponents,
+      (d, opp, per, seed, bot) => play(d, opp, per, seed, bot),
+      (d, opp, outcomes, cuts, adds) => ask({ type: "propose", deck: d, opponents: opp, outcomes, cuts, adds }, (m) => (m.type === "proposed" ? m.variants : undefined)),
+      options,
+      onProgress,
+    );
+  } finally {
+    stop();
+  }
+}
+
+/** Original vs improved deck on the same new games with stronger bots (slow: seconds per game). */
+export async function confirmInBrowser(
+  original: DeckData,
+  improved: DeckData,
+  opponents: DeckData[],
+  perMatchup: number,
+  bot: string,
+  onProgress: (done: number, total: number) => void,
+  signal: AbortSignal,
+): Promise<Confirmation> {
+  const { play, stop } = workerPool(signal);
+  try {
+    let first = 0;
+    return await confirmDecks<DeckData, Outcome>(
+      original,
+      improved,
+      opponents,
+      (d, opp, per, seed, b) =>
+        play(d, opp, per, seed, b, (done, total) => {
+          if (d === original) first = total;
+          onProgress((d === original ? 0 : first) + done, first ? first * 2 : total * 2);
+        }),
+      perMatchup,
+      bot,
+      "verify",
+    );
+  } finally {
     stop();
   }
 }

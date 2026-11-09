@@ -503,7 +503,17 @@ a { color: var(--cyan); }
 .an-counter { background: #121217; border: 1px solid var(--line); border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
 .an-counter-top { display: flex; gap: 10px; align-items: center; }
 .an-tech { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.an-counter-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.an-counter-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.an-doctor { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.an-doctor h2 { margin: 0; }
+.an-doctor h3 { margin: 6px 0 0; }
+.an-swap { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.an-doc-result { font-size: 1.15em; }
+.an-doctor .up { color: #5ad18a; }
+.an-doctor .down { color: #ff6b6b; }
+.an-doc-round summary { cursor: pointer; font-size: 0.9em; color: var(--muted, #9a9aa5); }
+.an-doc-round table { margin-top: 6px; }
+.an-sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
 .an-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .an-table td, .an-table th { padding: 4px 6px; border-bottom: 1px solid #1c1c24; text-align: left; }
 .an-table th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; }

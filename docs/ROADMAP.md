@@ -129,10 +129,26 @@ max 4 wątki, 2 na telefonach; `GET /api/analyze/pool` daje listy przeciwników)
 (136 partii online: ~8 min), przeglądarka robi to w ~3 s. Serwer liczy tylko, gdy przeglądarka nie da rady.
 CLI: `pnpm analyze --deck <id> --games 8`.
 
+✅ **Deck Doctor** (2026-11-09, ten sam ekran, wiersz „Deck Doctor”): co w talii słabe i jakie podmiany ją
+poprawiają. Przeciwnicy: **Meta decks** (`data/decks/meta-*`, `rogue-ai-*`) albo **All decks**; rozmiar Quick /
+Normal / Deep. Runda: wyniki talii → najsłabsze karty (wynik gdy zagrana vs nie, rzadko zagrywane) × kandydaci
+(karty pasujące do kolorów/RAM Legend, popularne w talii puli tych kolorów, groźne karty rywali) → podmiana
+**wszystkich kopii** karty (maks. 3, każda wersja przechodzi oficjalną kontrolę legalności) → wyścig (successive
+halving: wszystkie na małej liczbie partii, lepsze na większej, te same ziarna co talia bazowa) → **finaliści i
+talia bazowa grają świeże partie**; podmiana przechodzi tylko przy zysku ≥ 3 pkt i z = 1,28 (wcześniejsza wersja
+bez tego kroku przyjmowała „szczęśliwe” podmiany: potwierdzenie 65,8% → 62,0%). Na końcu potwierdzenie oryginał vs
+wynik na nowych partiach, **Check with Hard bots** (boty Hard, 4 partie na rywala) i **Save as a new deck**.
+Wszystko w przeglądarce (Normal vs 6 talii meta ≈ 7900 partii Easy; w przeglądarce ~25–30 partii/s).
+Kod: `packages/ai/src/doctor-loop.ts` (pętla bez danych kart, importuje ją strona), `packages/ai/src/doctor.ts`
+(karty), `apps/web/src/browserAnalysis.ts` (`doctorInBrowser`, `confirmInBrowser`), CLI
+`pnpm doctor --deck <id> [--opponents meta|all] [--verify masterful]`.
+Granice: boty Easy nie umieją grać częścią kart (np. zagrywanie Gear/Programów z warunkami), więc „słaba karta”
+bywa słaba dla bota, nie dla człowieka — stąd kontrola botami Hard; docelowo silniejszy bot do symulacji (etap 6).
+
 Do zrobienia:
 1. Silniejsze boty w symulacjach (opcja „Normal”/„Very Hard” w domu; Easy gra prosto, wyniki to przybliżenie).
-2. Warianty kontr-talii: podmiany kart sprawdzane symulacjami (etap 8), zapis jako Twoja talia.
-3. Pula przeciwników: także Twoje talie i meta z sieci (etap 7).
+2. Deck Doctor: zmiana Legend, budowanie talii od zera z meta (etap 7–8), wyścig na botach Hard w domu (CLI).
+3. Pula przeciwników: także Twoje talie.
 
 ## Etap 5b — Gra ze znajomym i telefon (stan 2026-11-08)
 Zrobione: lobby „vs Bot / vs Friend” + imię; pokój (`POST /api/rooms`) → poczekalnia z linkiem
@@ -220,6 +236,11 @@ Do zrobienia:
    gra tam bez zgody (droga: prośba do contact@choombattler.ch / Discord). o7 **zmienia talie między meczami**
    (np. Viktor Vektor / River Ward / Adam Smasher, wcześniej Green-Green-Red), a pełnych list strona nie pokazuje
    (gracz sam decyduje o odsłonięciu talii po grze; o7 nie odsłania) — widać tylko karty, które zagrał/odsłonił.
+   Talie testowe w `data/decks`: `meta-cb-*` (standardowe listy 4 najpopularniejszych archetypów ChoomBattlera;
+   4Y/2R Adam·River·Viktor to najczęściej grana talia mety — 15,8% gier, 60,4% wygranych — i ta, którą grał o7)
+   oraz `rogue-ai-ggr-*` (talia Jackie Welles: Mama's Favorite · Padre · V spisana przez gracza: 45 kart i szacunek 40).
+   Uwaga: w analizie z botami Easy 4Y/2R wygrywa tylko 45% — Easy nie umie grać takich talii; do oceny talii mety
+   potrzebne symulacje z Very Hard (i docelowo analiza z silniejszym botem, etap 5c pkt 1).
 
 ## Etap 2 — notatki techniczne
 - Serwer liczy listę legalnych akcji silnikiem (`enumerateCandidateActions` / `enumerateChoiceActions`)

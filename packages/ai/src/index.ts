@@ -9,3 +9,4 @@ export * from "./match.ts";
 export * from "./analysis.ts";
 export * from "./labels.ts";
 export * from "./coach.ts";
+export * from "./doctor.ts";

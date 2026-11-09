@@ -21,7 +21,8 @@
     "sim": "tsx tools/sim/src/cli.ts",
     "bench": "tsx tools/sim/src/bench.ts",
     "calibrate": "tsx tools/sim/src/calibrate.ts",
-    "analyze": "tsx tools/sim/src/analyze.ts"
+    "analyze": "tsx tools/sim/src/analyze.ts",
+    "doctor": "tsx tools/sim/src/doctor.ts"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

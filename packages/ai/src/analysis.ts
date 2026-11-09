@@ -99,7 +99,8 @@ export function planGauntlet(target: Deck, pool: Deck[], perMatchup: number, bot
 
 const isWin = (o: MatchOutcome) => (o.winner === "A" ? 1 : 0);
 
-function legendRamBudget(deck: Deck): Record<string, number> {
+/** RAM per colour from the Legends (cards of a colour may cost up to that much RAM). */
+export function legendRamBudget(deck: Deck): Record<string, number> {
   const catalog = getCatalog();
   const out: Record<string, number> = {};
   for (const slug of deck.legends) {
