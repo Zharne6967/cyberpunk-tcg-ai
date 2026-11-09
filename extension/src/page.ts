@@ -54,6 +54,14 @@ function trimmed(s: Json): Json | null {
             prompt: String(pending.prompt ?? ""),
             sourceCard: source ? { id: String(source.id ?? ""), cardId: String(source.cardId ?? "") } : null,
             options: Array.isArray(pending.actions) ? (pending.actions as Json[]).map((a) => String(a.label ?? "")) : [],
+            attackContext: pending.attackContext
+              ? {
+                  attackerId: String((pending.attackContext as Json).attackerId ?? ""),
+                  attackerPlayerId: String((pending.attackContext as Json).attackerPlayerId ?? ""),
+                  targetId: ((pending.attackContext as Json).targetId as string | null) ?? null,
+                  targetType: String((pending.attackContext as Json).targetType ?? ""),
+                }
+              : null,
           }
         : null,
       primaryActions: Array.isArray(controls.primaryActions) ? (controls.primaryActions as Json[]).map((a) => String(a.type ?? "")) : [],

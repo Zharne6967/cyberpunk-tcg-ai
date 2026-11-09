@@ -88,6 +88,8 @@ export interface SimPending {
   sourceCard?: { id?: string; cardId?: string } | null;
   /** The site's buttons for this choice ("PLUS", "TARGET FRIENDLY D4 4"…). */
   options?: string[];
+  /** A rival attack you answer (React Step): who attacks and what. */
+  attackContext?: { attackerId?: string; attackerPlayerId?: string; targetId?: string | null; targetType?: string } | null;
 }
 
 /**
@@ -135,4 +137,61 @@ export function simCoachAllowed(snap: SimSnapshot): { allowed: boolean; reason?:
       return { allowed: true };
   }
   return { allowed: false, reason: "Off in Quick Play, public lobbies, Ranked and tournaments" };
+}
+
+// ---- the site's button for the coach's move (labels from labels.ts, official terms)
+
+const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+
+/**
+ * Which of the site's buttons does the coach's move mean? (The site names options its own way and splits
+ * some choices into steps: the Gig, then PLUS / MINUS, then the amount.) null when nothing matches.
+ */
+export function siteButton(move: string, label: string, pending: SimPending | null | undefined): string | null {
+  const opts = pending?.options ?? [];
+  if (!opts.length) return null;
+  const find = (pred: (o: string) => boolean) => opts.find((o) => pred(norm(o))) ?? null;
+  const nameOf = (s: string) => norm(s.split(":")[0] ?? s);
+  const target = label.includes("→") ? label.split("→").pop()!.trim() : "";
+  switch (move) {
+    case "attackRival":
+      return find((o) => o.includes("RIVAL"));
+    case "attackUnit":
+      return target ? find((o) => !o.includes("RIVAL") && o.includes(nameOf(target))) : null;
+    case "useBlocker": {
+      const name = nameOf(label.replace(/^\[BLOCKER\]:\s*/, ""));
+      return find((o) => o.startsWith("BLOCK") && o.includes(name)) ?? find((o) => o.startsWith("BLOCK"));
+    }
+    case "passPhase":
+    case "resolveAttack":
+      return find((o) => o === "PASS" || o.includes("PASS") || o.includes("NO RESPONSE"));
+    case "callLegend": {
+      const slot = /\((\d)\)/.exec(label)?.[1];
+      const name = /^Call a Legend:\s*(.+)$/.exec(label)?.[1];
+      return (slot ? find((o) => o === `CALL L${slot}`) : null) ?? (name ? find((o) => o.includes(nameOf(name))) : null);
+    }
+    case "playCard":
+    case "activateAbility":
+      return pending?.type === "defense" ? find((o) => o.includes("QUICK")) : null;
+    case "resolveStealGigs": {
+      const m = /(D\d+)\s*\((\d+)\)/i.exec(label);
+      return m ? find((o) => o.includes(m[1]!.toUpperCase()) && o.split(" ").includes(m[2]!)) : null;
+    }
+    case "resolveAdjustGig": {
+      if (label === "No adjustment") return find((o) => /SKIP|DECLINE|NO |DONE|ZERO|^0$/.test(o));
+      const m = /(D\d+)\s*\((\d+)\)\s*→\s*(\d+)/i.exec(label);
+      if (!m) return null;
+      const [die, from, to] = [m[1]!.toUpperCase(), Number(m[2]), Number(m[3])];
+      return (
+        find((o) => o.split(" ").includes(die)) ??
+        (opts.some((o) => /PLUS|MINUS/i.test(o)) ? find((o) => o.includes(to > from ? "PLUS" : "MINUS")) : null) ??
+        find((o) => o === String(Math.abs(to - from)))
+      );
+    }
+    default: {
+      // Anything else: an option the label names (a card, a die).
+      const l = norm(label);
+      return opts.filter((o) => norm(o).length > 1 && l.includes(norm(o))).sort((a, b) => b.length - a.length)[0] ?? null;
+    }
+  }
 }

@@ -8,6 +8,9 @@ const version = document.getElementById("version") as HTMLSpanElement;
 version.textContent = chrome.runtime.getManifest().version;
 chrome.storage.local.get({ enabled: true }).then((v: { enabled: boolean }) => (box.checked = v.enabled !== false));
 box.addEventListener("change", () => chrome.storage.local.set({ enabled: box.checked }));
+const details = document.getElementById("details") as HTMLInputElement;
+chrome.storage.local.get({ details: false }).then((v: { details: boolean }) => (details.checked = v.details === true));
+details.addEventListener("change", () => chrome.storage.local.set({ details: details.checked }));
 document.getElementById("reset")!.addEventListener("click", () => chrome.storage.local.set({ pos: { x: 12, y: 12 } }));
 
 chrome.runtime

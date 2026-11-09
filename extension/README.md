@@ -32,7 +32,18 @@ Kliknij ikonę wtyczki (na stronie gry). Okienko pokazuje:
   Regulamin strony zabrania pomocy z zewnątrz w meczach, które się liczą („cheats … to manipulate matches,
   rankings … or tournament results”), a gra z obcymi przeciwnikami ma być uczciwa.
 
-## Co umie (wersja 0.1.4)
+## Okienko (wersja 0.1.5)
+- **▶ co zrobić**: przy wyborze na stronie — dokładnie który przycisk kliknąć („Click CALL L1”, „Click TAKE D4 3”,
+  „Click MINUS”, „Click KEEP”), pod spodem ten ruch w oficjalnych terminach; w Main Phase — ruch (np. „Play a Card: …”).
+- **dlaczego**: najwyraźniejsza różnica na stole do Twojej następnej tury względem drugiej opcji (np. „+ Rival's Gigs:
+  5,1 (6)”), a gdy różnic nie ma — szanse obu opcji.
+- **plan tury**: „Then: …” — kolejne Twoje ruchy w tej turze, jak je widzi Coach.
+- Klik w okienko (albo w przycisku wtyczki **Always show details**): plan krok po kroku, wszystkie powody, inne
+  opcje z szansami i ich przyciskami, liczba symulacji.
+
+## Co umie (wersja 0.1.5)
+- **React Step**: gdy rywal atakuje — blok ([BLOCKER]), Call a Legend, karta Quick albo PASS; Coach odtwarza atak
+  rywala w naszym silniku i liczy każdą odpowiedź.
 - **Kto zaczyna** („Go first” / „Go second”) i **ręka startowa** („Keep” / „Mulligan”): każda opcja z szansą na
   wygraną z symulacji dwóch pierwszych tur obu graczy (przy małej różnicy obie opcje są podobnie dobre).
 - Twoja **Main Phase** (zagranie, sprzedaż, Call a Legend, atak, Pass Turn) — także po atakach w tej samej turze —
@@ -41,7 +52,7 @@ Kliknij ikonę wtyczki (na stronie gry). Okienko pokazuje:
   („Rival Gig area” albo Jednostka), który Gig ukraść. Wtyczka odtwarza w naszym silniku Twój ostatni ruch z Main
   Phase, który do tego wyboru doprowadził, i liczy każdą opcję. Strona dzieli niektóre wybory na kroki (np. Gig →
   PLUS/MINUS → ile) — podpowiedź opisuje cały wybór naraz (np. „Adjust: D4 (4) → 3”).
-- Wybory, których nie da się tak odtworzyć (np. efekt karty rywala, React Step), nadal tylko opisuje:
+- Wybory, których nie da się tak odtworzyć (np. efekt karty rywala), nadal tylko opisuje:
   „Your choice: …” albo „Rival is choosing”.
 - Nie czyta jeszcze efektów „do końca tury” z kart programów — wtedy podpowiedź jest przybliżona.
 - 0.1.2: ocena pozycji z self-play (mocniejsze podpowiedzi). 0.1.3: Coach jest włączony, dopóki go nie wyłączysz

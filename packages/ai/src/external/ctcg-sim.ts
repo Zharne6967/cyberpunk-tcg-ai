@@ -109,6 +109,42 @@ function setupState(snap: SimSnapshot, d1: Deck, d2: Deck, me: string, rival: st
   return { ok: true, state: st, viewer, simIdOf };
 }
 
+/**
+ * A rival attack you answer (React Step): the rival's Main Phase is rebuilt with the attacker still ready,
+ * the same attack is declared in our engine, and the rival's own steps run until it is your response.
+ */
+function defenseState(snap: SimSnapshot, pending: SimPending, rivalSim: string, seed: string): SimConversion | null {
+  const ctx = pending.attackContext!;
+  const rewound = structuredClone(snap);
+  const attacker = rewound.players?.[rivalSim]?.field?.find((c) => c.id === ctx.attackerId);
+  if (!attacker) return null;
+  attacker.exhausted = false;
+  if (attacker.effects) attacker.effects = attacker.effects.filter((e) => e !== "spent");
+  rewound.controls = { pending: null, primaryActions: [] };
+  const conv = convertSimSnapshot(rewound, seed, [], rivalSim);
+  if (!conv.ok) return null;
+  const engineOf = (sim: string | null | undefined) => (sim ? [...conv.simIdOf].find(([, x]) => x === sim)?.[0] : undefined);
+  const attackerId = engineOf(ctx.attackerId);
+  if (!attackerId) return null;
+  const rivalPid = createPlayerId("p2");
+  const targetId = engineOf(ctx.targetId);
+  const declare = legalActions(conv.state, rivalPid).find((a) =>
+    ctx.targetType === "player" || !targetId ? a.move === "attackRival" && mentions(a, attackerId) : a.move === "attackUnit" && mentions(a, attackerId) && mentions(a, targetId),
+  );
+  if (!declare) return null;
+  let next = applyAction(conv.state, rivalPid, declare);
+  for (let step = 0; next && step < 8; step++) {
+    const turn = actorOf(next);
+    if (!turn) return null;
+    if (turn.pid === conv.viewer) return legalActions(next, conv.viewer).length > 1 ? { ok: true, state: next, viewer: conv.viewer, simIdOf: conv.simIdOf } : null;
+    // The rival's own steps of the attack (its {Attack} effects): the first option (the site already went past them).
+    const options = legalActions(next, turn.pid);
+    if (!options.length) return null;
+    next = applyAction(next, turn.pid, options[0]!);
+  }
+  return null;
+}
+
 /** Rival moves that would change the attack (a Blocker, a Quick card): never assumed. */
 const PLAYS = new Set(["useBlocker", "playCard", "activateAbility", "callLegend", "sellCard", "goSolo"]);
 
@@ -202,7 +238,11 @@ const defaultMeta = () => ({
  * Rebuild the viewer's decision point in our engine. Supported: the viewer's Main Phase (no choice or
  * attack in progress) and the Start Phase Gig roll. Anything else returns a reason instead.
  */
-export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim", previous: SimSnapshot[] = []): SimConversion {
+/**
+ * Rebuild the viewer's decision point. `previous`: the viewer's last Main/Start Phase positions (a choice
+ * is replayed from them). `activeSim` (internal): rebuild the rival's Main Phase instead (React Step).
+ */
+export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim", previous: SimSnapshot[] = [], activeSim?: string): SimConversion {
   ensureRegistry();
   const me = snap.self?.playerId ?? undefined;
   const game = snap.game ?? {};
@@ -210,10 +250,13 @@ export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim", previou
   const order = game.playerOrder?.length === 2 ? game.playerOrder : Object.keys(players);
   const rival = order.find((p) => p !== me);
   if (!me || !rival || !players[me] || !players[rival]) return { ok: false, reason: "No game in progress" };
-  const decision = simDecision(snap);
+  const decision: ReturnType<typeof simDecision> = activeSim ? { kind: "main" } : simDecision(snap);
   if (decision.kind === "wait") return { ok: false, reason: decision.reason };
   if (decision.kind === "choice") {
     const pending = (typeof snap.controls?.pending === "object" ? snap.controls.pending : null) ?? {};
+    const attack = pending.attackContext;
+    if (attack?.attackerId && attack.attackerPlayerId && attack.attackerPlayerId !== me)
+      return defenseState(snap, pending, attack.attackerPlayerId, seed) ?? { ok: false, reason: `Your choice: ${decision.label}` };
     return choiceState(pending, previous, seed) ?? { ok: false, reason: `Your choice: ${decision.label}` };
   }
 
@@ -223,6 +266,7 @@ export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim", previou
   if (decision.kind === "order") return { ok: true, state: structuredClone(freshState(d1, d2, seed).getState()), viewer: createPlayerId("p1"), simIdOf: new Map() };
   if (decision.kind === "mulligan") return setupState(snap, d1, d2, me, rival, seed);
   const phase = decision.kind;
+  const activePid = activeSim && activeSim !== me ? "p2" : "p1";
   const s = baseState(d1, d2, seed);
   if (!s) return { ok: false, reason: "Could not set up the game" };
 
@@ -280,7 +324,7 @@ export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim", previou
       // A Unit of yours that is ready but cannot attack was played this turn (Lag).
       // Lag: the site marks it (status "lag"); older snapshots: a ready Unit of yours that cannot attack.
       if (c.effects) card.meta.hasLag = c.effects.includes("lag");
-      else if (pid === "p1" && phase === "main" && !c.exhausted && c.canDeclareAttackThisTurn === false && c.type !== "Gear") card.meta.hasLag = true;
+      else if (pid === activePid && phase === "main" && !c.exhausted && c.canDeclareAttackThisTurn === false && c.type !== "Gear") card.meta.hasLag = true;
       for (const a of c.attachments ?? []) {
         const ac = typeof a === "string" ? { id: a } : a;
         const gear = place(takeKnown(ac), "field", ac);
@@ -323,8 +367,8 @@ export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim", previou
     ps.eddieCardIds = [...zones.eddieArea!] as never;
     ps.eddies = ready;
     ps.spentEddies = spent;
-    ps.soldThisTurn = pid === "p1" ? !!sp.soldCardThisTurn : false;
-    ps.calledLegendThisTurn = pid === "p1" ? !!sp.calledLegendThisTurn : false;
+    ps.soldThisTurn = pid === activePid ? !!sp.soldCardThisTurn : false;
+    ps.calledLegendThisTurn = pid === activePid ? !!sp.calledLegendThisTurn : false;
     ps.calledLegendThisRivalTurn = false;
     ps.firstPlayer = game.firstPlayerId === simPid;
     ps.mulliganDone = true;
@@ -361,7 +405,7 @@ export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim", previou
   // Turn.
   const viewer = createPlayerId("p1");
   const tm = s.G.turnMetadata;
-  tm.activePlayerId = viewer;
+  tm.activePlayerId = activePid as PlayerId;
   tm.turnNumber = game.turnNumber ?? tm.turnNumber;
   tm.overtimeActive = !!game.overtime;
   tm.gigTakenThisTurn = phase === "main";
@@ -389,6 +433,6 @@ export function convertSimSnapshot(snap: SimSnapshot, seed = "ctcg-sim", previou
     tm.pendingChoice = { type: "gainGig", chooserId: viewer, effectId: "start-phase", payload: { allowedDieIds: [...allowed] } } as never;
   }
   recomputeActiveEffects(s);
-  if (!legalActions(s, viewer).length) return { ok: false, reason: "No move found" };
+  if (!legalActions(s, activePid as PlayerId).length) return { ok: false, reason: "No move found" };
   return { ok: true, state: s, viewer, simIdOf };
 }

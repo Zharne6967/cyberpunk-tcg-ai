@@ -4,7 +4,7 @@ import { buildPlayerPrompt, filterMatchView } from "@tcg/cyberpunk-engine";
 import { getCatalog } from "@cpai/core";
 import { legalActions } from "../ismcts/actions.ts";
 import { coachAdvice } from "../coach.ts";
-import { convertSimSnapshot, simCoachAllowed, simDecision, type SimSnapshot } from "./ctcg-sim.ts";
+import { convertSimSnapshot, simCoachAllowed, simDecision, siteButton, type SimPending, type SimSnapshot } from "./ctcg-sim.ts";
 
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8")) as SimSnapshot;
 
@@ -202,6 +202,42 @@ describe("cyberpunk-tcg-sim.online snapshot → engine (extension coach)", () =>
     expect(options.length).toBe(2);
     const advice = coachAdvice({ stateID: 0, viewer: "p1", world: r.state, remembered: [] }, { iterations: 200, timeMs: 4000, seed: "t" });
     expect(advice.moves.length).toBe(2);
+  });
+
+  // Turn 7 of another game: the rival's MT0D12 Flathead makes a Gig attack; you may block, call, use a Quick card or pass.
+  const defense = JSON.parse(readFileSync(new URL("./fixtures/defense.json", import.meta.url), "utf8")) as SimSnapshot;
+
+  it("React Step: the rival's attack is rebuilt and your responses are ranked", () => {
+    expect(simDecision(defense)).toEqual({ kind: "choice", label: "Choose response" });
+    const r = convertSimSnapshot(defense, "t");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.state.G.attackState?.step).toBe("react");
+    const ms = legalActions(r.state, r.viewer).map((a) => a.move);
+    expect(ms).toContain("useBlocker");
+    expect(ms.filter((m) => m === "callLegend").length).toBe(3); // the site offers CALL L1–L3 too
+    const advice = coachAdvice({ stateID: 0, viewer: "p1", world: r.state, remembered: [] }, { iterations: 200, timeMs: 4000, seed: "t" });
+    expect(advice.moves.length).toBe(3);
+  });
+
+  it("the coach's move becomes the site's button", () => {
+    const pend = (s: SimSnapshot) => s.controls!.pending as SimPending;
+    const d = pend(defense);
+    expect(siteButton("useBlocker", "[BLOCKER]: Secondhand Bombus", d)).toBe("BLOCK Secondhand Bombus");
+    expect(siteButton("resolveAttack", "Pass", d)).toBe("PASS");
+    expect(siteButton("callLegend", "Call a Legend (2)", d)).toBe("CALL L2");
+    expect(siteButton("playCard", "Play a Card: Reboot Optics", d)).toBe("USE QUICK");
+    const t = atk.attackTargetPending as SimPending;
+    expect(siteButton("attackRival", "Attack: Delamain Cab → Rival Gig area", t)).toBe("RIVAL GIGS");
+    expect(siteButton("attackUnit", "Attack: Delamain Cab → Evelyn Parker: Scheming Siren", t)).toBe("Evelyn Parker: Scheming Siren");
+    expect(siteButton("resolveStealGigs", "Steal: D4 (3)", atk.stealPending as SimPending)).toBe("TAKE D4 3");
+    expect(siteButton("resolveStealGigs", "Steal: D6 (4)", atk.stealPending as SimPending)).toBe("TAKE D6 4");
+    // Afterparty at Lizzie's, in the site's three steps.
+    const adjust = "Adjust: D4 (4) → 3";
+    expect(siteButton("resolveAdjustGig", adjust, pend(live.choice))).toBe("TARGET FRIENDLY D4 4");
+    expect(siteButton("resolveAdjustGig", adjust, { type: "afterparty_choice", options: ["PLUS", "MINUS"] })).toBe("MINUS");
+    expect(siteButton("resolveAdjustGig", adjust, { type: "afterparty_choice", options: ["1"] })).toBe("1");
+    expect(siteButton("playCard", "Play a Card: Psycho Squad", null)).toBeNull();
   });
 
   it("the opening hand gets win chances from playouts", () => {
