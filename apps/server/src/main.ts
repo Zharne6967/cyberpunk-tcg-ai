@@ -5,7 +5,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { STRATEGIES } from "@cpai/ai";
 import { checkDeckLegality, isDeckLegal, type Deck } from "@cpai/core";
 import type { BotSummary, ClientMessage, NewGameRequest, RoomInfo, SeatTicket } from "@cpai/core/protocol";
-import { checkDeck, deleteUserDeck, getDeck, importDeckText, isUserDeck, loadAllDecks, sanitizeDeck, saveUserDeck, summarizeDeck } from "./decks.ts";
+import { checkDeck, deleteUserDeck, getDeck, importDeckText, isUserDeck, loadAllDecks, loadBuiltinDecks, sanitizeDeck, saveUserDeck, summarizeDeck } from "./decks.ts";
 import { botPool } from "./bot-pool.ts";
 import { AnalysisBusy, GAMES_PER_MATCHUP, analysisJob, startAnalysis } from "./analysis.ts";
 import { GameSession, games, roomByCode } from "./game.ts";
@@ -192,6 +192,8 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, ticket(game, "p1"));
     }
     // ---- deck analysis (gauntlet against the built-in decks, polled by the page)
+    // The opponents of a deck analysis (full lists: the browser can play the gauntlet itself).
+    if (p === "/api/analyze/pool" && req.method === "GET") return sendJson(res, 200, loadBuiltinDecks().filter((d) => isDeckLegal(d)));
     if (p === "/api/analyze" && req.method === "POST") {
       const body = (await readBody(req)) as { deckId?: string; deck?: unknown; deckText?: string; deckName?: string; games?: number };
       const deck = playerDeck(body);

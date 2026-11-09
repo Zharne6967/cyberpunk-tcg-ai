@@ -13,5 +13,7 @@ export default defineConfig({
       "/ws": { target: api.replace("http", "ws"), ws: true },
     },
   },
+  // Deck analysis runs the rules engine in module workers (code-split, loaded only when used).
+  worker: { format: "es" },
   build: { outDir: "dist", emptyOutDir: true, chunkSizeWarningLimit: 1500 },
 });

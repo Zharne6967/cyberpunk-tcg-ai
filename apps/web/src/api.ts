@@ -102,6 +102,8 @@ export const api = {
   /** Deck analysis: a saved deck, deck data (Deck Builder) or a pasted list; the job is polled. */
   analyze: async (req: { deckId?: string; deck?: DeckData; deckText?: string; games: number }) =>
     getJson<AnalysisJob>("/api/analyze", json("POST", { games: req.games, ...(req.deck ? { deck: req.deck } : req.deckText ? { deckText: req.deckText } : await deckRef(req.deckId ?? "")) })),
+  /** Opponents of an analysis (built-in decks, full lists). */
+  analysisPool: () => getJson<DeckData[]>("/api/analyze/pool"),
   analysisJob: (id: string) => getJson<AnalysisJob>(`/api/analyze/${encodeURIComponent(id)}`),
   /** botDeckData: play against a deck that is not saved (e.g. an analysed list). */
   newGame: async (req: NewGameRequest & { botDeckData?: DeckData }) => {

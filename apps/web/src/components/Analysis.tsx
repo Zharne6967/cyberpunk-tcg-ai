@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { AnalysisFinding, AnalysisJob, AnalysisReport, DeckData, DeckProfile, DeckSummary, WinRate } from "@cpai/core/protocol";
 import { api, loadCardDb, type CardDb } from "../api.ts";
+import { analyzeInBrowser } from "../browserAnalysis.ts";
 import { CardFace } from "./CardFace.tsx";
 import { DeckPicker } from "./Lobby.tsx";
 
 const JOB_KEY = "cpai.analysis.job";
+/** Last report made in this browser. */
+const REPORT_KEY = "cpai.analysis.report";
+/** Job id of an analysis running on this device. */
+const LOCAL = "local";
 /** Deck Builder → analysis handoff for a deck that is not saved yet. */
 export const HANDOFF_KEY = "cpai.analysis.deck";
 const GAMES = [4, 8, 16];
@@ -323,18 +328,23 @@ export function Analysis({ deckId }: { deckId?: string }) {
       })
       .catch(() => {});
     // Coming back to this page (or a reload) shows the last analysis.
-    let saved: string | null = null;
+    if (deckId) return;
     try {
-      saved = sessionStorage.getItem(JOB_KEY);
+      const saved = sessionStorage.getItem(JOB_KEY);
+      const local = sessionStorage.getItem(REPORT_KEY);
+      if (saved) api.analysisJob(saved).then(setJob).catch(() => {});
+      else if (local) setJob({ id: LOCAL, status: "done", done: 0, total: 0, report: JSON.parse(local) as AnalysisReport });
     } catch {
       /* ignore */
     }
-    if (saved && !deckId) api.analysisJob(saved).then(setJob).catch(() => {});
   }, [deckId]);
+  // Leaving the page stops games running on this device.
+  const abort = useRef<AbortController | null>(null);
+  useEffect(() => () => abort.current?.abort(), []);
 
   const active = job && (job.status === "queued" || job.status === "running");
   useEffect(() => {
-    if (!job || !active) return;
+    if (!job || !active || job.id === LOCAL) return;
     const t = setTimeout(
       () =>
         api
@@ -346,17 +356,55 @@ export function Analysis({ deckId }: { deckId?: string }) {
     return () => clearTimeout(t);
   }, [job, active]);
 
+  /** The deck to analyse as data (a pasted list is resolved and checked by the server first). */
+  const target = async (): Promise<DeckData> => {
+    if (builderDeck && source === "deck" && !pick) return builderDeck;
+    if (source === "deck") return api.deck(pick);
+    const { deck, unresolved } = await api.importDeck(text);
+    if (unresolved.length) throw new Error(`Unknown cards: ${unresolved.map((u) => u.name).join(", ")}`);
+    const check = await api.checkDeck(deck);
+    if (!check.legal) throw new Error(`The deck is not legal: ${check.problems.filter((p) => p.severity === "error").map((p) => p.message).join("; ")}`);
+    return deck;
+  };
+
+  const remember = (key: string, value: string) => {
+    try {
+      sessionStorage.removeItem(JOB_KEY);
+      sessionStorage.removeItem(REPORT_KEY);
+      sessionStorage.setItem(key, value);
+    } catch {
+      /* ignore (a report can exceed the storage quota) */
+    }
+  };
+
   const start = async () => {
     setError(undefined);
+    abort.current?.abort();
+    const ctl = (abort.current = new AbortController());
+    let deck: DeckData;
     try {
-      const j = builderDeck && source === "deck" && !pick ? await api.analyze({ deck: builderDeck, games }) : source === "list" ? await api.analyze({ deckText: text, games }) : await api.analyze({ deckId: pick, games });
-      setJob(j);
-      try {
-        sessionStorage.setItem(JOB_KEY, j.id);
-      } catch {
-        /* ignore */
-      }
+      deck = await target();
     } catch (e) {
+      return setError(String((e as Error).message ?? e));
+    }
+    // On this device first (several threads); the server plays the games when that is not possible.
+    try {
+      setJob({ id: LOCAL, status: "running", done: 0, total: 0 });
+      const pool = await api.analysisPool();
+      const report = await analyzeInBrowser(deck, pool, games, (done, total) => !ctl.signal.aborted && setJob({ id: LOCAL, status: "running", done, total }), ctl.signal);
+      setJob({ id: LOCAL, status: "done", done: report.overall.games, total: report.overall.games, report });
+      remember(REPORT_KEY, JSON.stringify(report));
+      return;
+    } catch (e) {
+      if (ctl.signal.aborted) return;
+      console.warn("Analysis in the browser failed, using the server:", e);
+    }
+    try {
+      const j = await api.analyze({ deck, games });
+      setJob(j);
+      remember(JOB_KEY, j.id);
+    } catch (e) {
+      setJob(undefined);
       setError(String((e as Error).message ?? e));
     }
   };

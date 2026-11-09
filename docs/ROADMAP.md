@@ -103,7 +103,10 @@ talią wbudowaną (4/8/16 partii na parę, miejsca zamieniane, boty Easy po obu 
 Technicznie: `packages/ai/src/match.ts` (partia bot–bot ze statystyką kart, wersja generatora nieblokująca
 serwera), `packages/ai/src/analysis.ts` (plan gauntletu + raport), `apps/server/src/analysis.ts` (kolejka zadań,
 `POST /api/analyze`, `GET /api/analyze/:id`; w domu wątki, online w głównym procesie w krótkich porcjach).
-Czas: 136 partii ≈ 12 s na jednym wątku, 272 partie ≈ 8 s na 4 wątkach. CLI: `pnpm analyze --deck <id> --games 8`.
+**Domyślnie partie grają się w przeglądarce gracza** (`packages/ai/src/browser-worker.ts`, Web Workers z silnikiem,
+max 4 wątki, 2 na telefonach; `GET /api/analyze/pool` daje listy przeciwników) — darmowy serwer ma ułamek rdzenia
+(136 partii online: ~8 min), przeglądarka robi to w ~3 s. Serwer liczy tylko, gdy przeglądarka nie da rady.
+CLI: `pnpm analyze --deck <id> --games 8`.
 
 Do zrobienia:
 1. Silniejsze boty w symulacjach (opcja „Normal”/„Very Hard” w domu; Easy gra prosto, wyniki to przybliżenie).
