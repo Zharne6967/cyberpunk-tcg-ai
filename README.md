@@ -44,7 +44,15 @@ Przycisk **Deck Builder** w lobby (albo „Open in Deck Builder” przy Twojej t
   status legalności (oficjalne reguły) i „Draw Starting Hand”.
 - **Save Deck** zapisuje w `var/decks/` (talia wbudowana zapisuje się jako Twoja kopia), **Import** przyjmuje
   listę wklejoną ze stron z taliami („3x Nazwa karty”), **Export** daje listę tekstową, **Play** wraca do
-  lobby z tą talią.
+  lobby z tą talią, **Analyze** otwiera analizę talii, **Delete** usuwa Twoją talię albo chowa wbudowaną
+  („Restore built-in decks” ją przywraca).
+
+## Deck Analysis
+Przycisk **Deck Analysis** w lobby (albo **Analyze** w Deck Builderze). Wybierasz talię albo wklejasz listę
+rywala; talia rozgrywa po 4/8/16 partii z każdą talią wbudowaną (boty Easy po obu stronach, miejsca
+zamieniane). Raport: słabości i mocne strony, „How to beat it”, 3 najlepsze kontr-talie (z kartami do dodania
+i przyciskiem **Play it vs this deck**), wyniki każdego dopasowania, kluczowe karty i profil talii.
+Z terminala: `pnpm analyze --deck <id> --games 8`.
 
 ## Co już działa
 - **Gra w przeglądarce przeciwko botowi** (etap 2): pełne zasady (mulligan, Gigi, Eddies, sprzedaż,
