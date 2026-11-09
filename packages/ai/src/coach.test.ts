@@ -64,6 +64,21 @@ describe("coach (the player's browser only gets what the player knows)", () => {
       expect(w.G.cardIndex[id]!.definitionId).toBe(real.G.cardIndex[id]!.definitionId);
   });
 
+  it("every move in the player's world is the same command in the real game (ids the player sees are kept)", () => {
+    const w = coachWorld(real, p2, [], "s").world;
+    const realKeys = new Set(legalActions(real, p2).map((a) => coachKey(a.move, a.args)));
+    const worldKeys = legalActions(w, p2).map((a) => coachKey(a.move, a.args));
+    expect(worldKeys.length).toBeGreaterThan(1);
+    for (const k of worldKeys) expect(realKeys.has(k)).toBe(true);
+    // Face-down Legends and Eddies are on the table: their ids stay where they are (Call a Legend refers to them).
+    const faceDown = ["p1", "p2"].flatMap((pid) => [...real.G.players[pid]!.zones.legendArea, ...real.G.players[pid]!.zones.eddieArea]).filter((id) => real.G.cardIndex[id]!.meta.faceDown);
+    expect(faceDown.length).toBeGreaterThan(0);
+    for (const pid of ["p1", "p2"]) {
+      expect(w.G.players[pid]!.zones.legendArea).toEqual(real.G.players[pid]!.zones.legendArea);
+      expect(w.G.players[pid]!.zones.eddieArea).toEqual(real.G.players[pid]!.zones.eddieArea);
+    }
+  });
+
   it("recommends moves that are legal in the real game, best first, with a label", () => {
     const advice = coachAdvice(coachWorld(real, p2, [], "s"), { iterations: 80, timeMs: 20_000, seed: "c" });
     const legal = new Set(legalActions(real, p2).map((a) => coachKey(a.move, a.args)));

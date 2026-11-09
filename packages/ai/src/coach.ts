@@ -31,9 +31,20 @@ export function coachWorld(state: MatchState, viewer: PlayerId, remembered: Iter
   const info = informationSet(state, viewer, remembered);
   const rng = new SeededRNG(seed);
   const world = determinize(state, info, rng);
+  // Ids the player already sees on the table (also face-down Legends and Eddies) stay: the player's
+  // moves refer to them. Only ids that never reach the player (decks, the rival's hand) are shuffled.
+  const shown = new Set<string>();
+  const scan = (v: unknown): void => {
+    if (Array.isArray(v)) return v.forEach(scan);
+    if (!v || typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    if (typeof o.instanceId === "string") shown.add(o.instanceId);
+    for (const k in o) if (o[k] && typeof o[k] === "object") scan(o[k]);
+  };
+  scan(filterMatchView(state, viewer));
   const byOwner = new Map<string, string[]>();
   for (const [id, card] of Object.entries(world.G.cardIndex)) {
-    if (info.stableIds.has(id) || info.rememberedInDeck.has(id)) continue;
+    if (info.stableIds.has(id) || info.rememberedInDeck.has(id) || shown.has(id)) continue;
     const list = byOwner.get(card.ownerId as string) ?? [];
     list.push(id);
     byOwner.set(card.ownerId as string, list);
