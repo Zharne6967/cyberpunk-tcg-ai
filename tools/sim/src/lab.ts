@@ -3,14 +3,16 @@
  * the pool, the best kept and refined.
  *
  *   pnpm lab [--opponents meta|all] [--objective average|worst] [--generations 6] [--population 24]
- *            [--keep slug,slug] [--workers 15] [--verify ismcts-fast --verify-games 4 --verify-iters 40]
+ *            [--keep slug,slug] [--workers 15] [--bot greedy|ismcts-sim] [--verify ismcts-sim --verify-games 4] [--out decks.json]
+ *   pnpm lab --check decks.json [--with deck-id,deck-id] [--verify ismcts-sim] [--verify-games 4]
+ *            (only the check: these decks against the pool with another bot)
  */
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import { deckToText, getCatalog, isDeckLegal, type Deck } from "@cpai/core";
+import { deckToText, isDeckLegal, type Deck } from "@cpai/core";
 import { isMetaDeck, labBreed, labLoop, labSeed, opponentsOf, planGauntlet, wilsonCi, type LabEntry, type MatchOutcome } from "@cpai/ai";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -45,12 +47,40 @@ function run(target: Deck, opponents: Deck[], perMatchup: number, seed: string, 
   ).then(() => outcomes);
 }
 
-const name = (slug: string) => getCatalog().bySlug(slug)?.displayName ?? slug;
 const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
 const keep = args.keep ? args.keep.split(",") : [];
+
+/** Decks against the pool with another bot; prints every matchup. */
+async function check(decks: Deck[], bot: string, per: number) {
+  const ism = bot.startsWith("ismcts") && bot !== "ismcts-sim" ? { iterations: Number(args["verify-iters"] ?? 40), timeMs: undefined } : undefined;
+  const rows: { name: string; rate: number; ci: [number, number]; n: number }[] = [];
+  for (const d of decks) {
+    const opps = opponentsOf(d, pool);
+    const out = await run(d, opps, per, "verify", bot, ism);
+    const each = Math.max(2, Math.floor(per / 2) * 2);
+    const wins = out.filter((o) => o?.winner === "A").length;
+    const n = out.filter(Boolean).length;
+    const ci = wilsonCi(wins, n);
+    console.log(`\nCheck with ${bot}: ${d.name}  ${pct(wins / Math.max(1, n))} [${pct(ci[0])}–${pct(ci[1])}] over ${n} games`);
+    opps.forEach((o, i) => {
+      const slice = out.slice(i * each, (i + 1) * each).filter(Boolean);
+      console.log(`   ${slice.filter((g) => g!.winner === "A").length}/${slice.length}  vs ${o.name}`);
+    });
+    rows.push({ name: d.name, rate: wins / Math.max(1, n), ci, n });
+  }
+  console.log(`\nRanking with ${bot}:`);
+  for (const r of rows.sort((a, b) => b.rate - a.rate)) console.log(`  ${pct(r.rate).padStart(4)} [${pct(r.ci[0])}–${pct(r.ci[1])}] ${r.n} games  ${r.name}`);
+}
+
+if (args.check) {
+  const decks = (JSON.parse(readFileSync(args.check, "utf8")) as Deck[]).map((d, i) => ({ ...d, name: `Lab #${i + 1}: ${d.name}` }));
+  const extra = (args.with ?? "").split(",").filter(Boolean).map((id) => all.find((d) => d.id === id)!).filter(Boolean);
+  await check([...decks, ...extra], args.verify ?? "ismcts-sim", Number(args["verify-games"] ?? 4));
+  process.exit(0);
+}
 const report = await labLoop(
   pool,
-  (d, o, per, seed) => run(d, o, per, seed),
+  (d, o, per, seed) => run(d, o, per, seed, args.bot ?? "greedy"),
   {
     seed: async (count, seed, values) => labSeed({ pool, count, seed, keep, values }),
     breed: async (parents, count, seed, values) => labBreed({ parents, pool, count, seed, keep, values }),
@@ -78,17 +108,5 @@ const best = report.finalists[0];
 if (best) {
   console.log("\n" + deckToText(best.deck));
   if (args.out) writeFileSync(args.out, JSON.stringify(report.finalists.map((f) => f.deck), null, 1));
-  if (args.verify) {
-    const iters = Number(args["verify-iters"] ?? 40);
-    const per = Number(args["verify-games"] ?? 4);
-    const ism = { iterations: iters, timeMs: undefined };
-    for (const d of [best.deck, ...(report.bestPool ? [report.bestPool.deck] : [])]) {
-      const opps = opponentsOf(d, pool);
-      const out = await run(d, opps, per, "verify", args.verify, args.verify.startsWith("ismcts") ? ism : undefined);
-      const wins = out.filter((o) => o?.winner === "A").length;
-      const n = out.filter(Boolean).length;
-      const ci = wilsonCi(wins, n);
-      console.log(`Check with ${args.verify}${args.verify.startsWith("ismcts") ? ` ${iters}` : ""}: ${d.name} ${pct(wins / Math.max(1, n))} [${pct(ci[0])}–${pct(ci[1])}] over ${n} games`);
-    }
-  }
+  if (args.verify) await check([...report.finalists.map((f) => f.deck), ...(report.bestPool ? [report.bestPool.deck] : [])], args.verify, Number(args["verify-games"] ?? 4));
 }

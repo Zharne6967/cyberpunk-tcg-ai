@@ -39,6 +39,15 @@ new deck*, **Check with Strong bots** (`ismcts-sim`, 4 partie na rywala). Kod: `
 `lab-loop.ts` (pętla bez danych kart), `apps/web/src/browserAnalysis.ts` (`labInBrowser`, `checkInBrowser`),
 `apps/web/src/components/Lab.tsx`.
 
+**Eksperyment „Beat every deck”** (CLI, 10 talii meta, 10 generacji × 28 talii, 17 916 partii Easy, 904 s):
+z botami Easy Lab znalazł Saburo / V / Adam Smasher bijące wszystkie 10 talii (88%, najsłabsze 81%). **Botami Strong**
+(`pnpm lab --check`, `ismcts-sim`, 4 partie na rywala, ~40 partii na talię): Adam/Dexter/Padre (meta) 67%,
+**Lab #3 63%**, Rogue AI GGR 61%, Adam/River/Viktor 58%, Adam/Saburo/V 53%, Dexter/Padre/V 47%, Lab #1 i #2 po 43%.
+Wniosek: wyszukiwanie na botach Easy znajduje też talie, które wykorzystują słabości bota Easy — o kolejności
+finalistów rozstrzyga sprawdzenie botami Strong (w aplikacji: wszyscy finaliści). Rankingi botów Strong zgadzają się
+z ladderem ChoomBattlera lepiej niż Easy (Adam/Dexter/Padre 64.9% na ladderze). Talii bijącej wszystko przy mocnej
+grze nie znaleziono; następny krok: wyszukiwanie od razu na botach Strong (`pnpm lab --bot ismcts-sim`, nocą).
+
 **Pula meta** = `data/decks/meta-*`, `rogue-ai-*` + talie dodane przez gracza („Meta pool” → *Add to the meta pool*,
 w przeglądarce, `apps/web/src/metaPool.ts`; używa jej też Deck Doctor). Dodane 2026-11-09 z ChoomBattler
 (ranked, Core BO1, 30 dni, Standard lists): Dexter/Padre/V (62.8%), Adam/Saburo/V (58.9%), Adam/Dexter/Padre (64.9%).

@@ -291,7 +291,7 @@ export function Lab() {
   const runCheck = async (report: LabReport<DeckData>) => {
     checkAbort.current?.abort();
     const ctl = (checkAbort.current = new AbortController());
-    const decks = [report.finalists[0]?.deck, report.bestPool?.deck].filter((d): d is DeckData => !!d);
+    const decks = [...report.finalists.map((f) => f.deck), ...(report.bestPool ? [report.bestPool.deck] : [])];
     setCheck({ done: 0, total: 0 });
     try {
       setCheck(await checkInBrowser(decks, report.opponents, CHECK_PER, "ismcts-sim", (done, total) => !ctl.signal.aborted && setCheck({ done, total }), ctl.signal));
@@ -306,6 +306,7 @@ export function Lab() {
   const report = state?.status === "done" ? state.report : undefined;
   const checked = Array.isArray(check) ? check : undefined;
   const progress = check && !Array.isArray(check) ? check : undefined;
+  const checkOf = (id: string) => checked?.find((c) => c.deckId === id);
   return (
     <div className="analysis">
       <header className="lobby-top">
@@ -390,6 +391,9 @@ export function Lab() {
                 {report.finalists.length} new decks · {report.history.at(-1)?.decks ?? 0} decks tested · {report.games} games · {(report.ms / 1000).toFixed(0)} s
               </span>
             </div>
+            <p className="muted small">
+              Easy bots on both sides. A deck can score high by using what Easy bots play badly: check the best deck with Strong bots before you rely on it.
+            </p>
             <div className="lab-history">
               {report.history.map((h) => (
                 <span key={h.generation} className="small muted">
@@ -401,10 +405,10 @@ export function Lab() {
               <div className="an-overall">
                 <span className="small">Best pool deck: {report.bestPool.deck.name}</span>
                 <Rate r={report.bestPool} />
-                {checked?.[1] && (
+                {checkOf(report.bestPool.deck.id) && (
                   <>
                     <span className="small">Strong bots</span>
-                    <Rate r={checked[1]} />
+                    <Rate r={checkOf(report.bestPool.deck.id)!} />
                   </>
                 )}
               </div>
@@ -427,7 +431,7 @@ export function Lab() {
             </div>
           </section>
           {report.finalists.map((e, i) => (
-            <LabDeck key={e.deck.id} db={db} entry={e} rank={i + 1} check={i === 0 ? checked?.[0] : undefined} />
+            <LabDeck key={e.deck.id} db={db} entry={e} rank={i + 1} check={checkOf(e.deck.id)} />
           ))}
         </>
       )}
