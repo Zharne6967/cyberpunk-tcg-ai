@@ -6,6 +6,10 @@ uczciwy bot co „Coach” w naszej aplikacji — **wyłącznie z tego, co widzi
 i zakryte karty są dla niego tak samo nieznane jak dla Ciebie) — i to na Twoim komputerze, nic nie jest
 nigdzie wysyłane.
 
+## Aktualizacja
+Po podmianie plików wtyczki:  → przy „Cyberpunk TCG Coach” ikona odświeżania (↻), potem odśwież
+stronę gry (F5).
+
 ## Instalacja (Chrome / Edge)
 1. Rozpakuj `cyberpunk-tcg-coach.zip` do folderu (albo zbuduj sam: `node extension/build.mjs` → `extension/dist`).
 2. Otwórz `chrome://extensions` (w Edge: `edge://extensions`) i włącz **Tryb dewelopera**.
@@ -20,9 +24,11 @@ nigdzie wysyłane.
   Regulamin strony zabrania pomocy z zewnątrz w meczach, które się liczą („cheats … to manipulate matches,
   rankings … or tournament results”), a gra z obcymi przeciwnikami ma być uczciwa.
 
-## Co umie (wersja 0.1)
-- Twoja **Main Phase** (zagranie, sprzedaż, Call a Legend, atak, Pass Turn) i **wybór kości Giga** na początku tury.
-- W pozostałych chwilach (tura rywala, React Step, wybory celów) okienko czeka: „Waiting for your turn”.
+## Co umie (wersja 0.1.1)
+- Twoja **Main Phase** (zagranie, sprzedaż, Call a Legend, atak, Pass Turn) — także po atakach w tej samej turze —
+  i **wybór kości Giga** na początku tury (tylko kości, którymi strona pozwala rzucić).
+- Gdy strona czeka na wybór (cel efektu, kradzież Giga, React Step), okienko pisze, czyj to wybór:
+  „Your choice: …” albo „Rival is choosing” — podpowiedzi do tych wyborów jeszcze nie ma.
 - Nie czyta jeszcze efektów „do końca tury” z kart programów — wtedy podpowiedź jest przybliżona.
 - Wtyczka czyta stan gry, który strona trzyma w przeglądarce; jeśli strona zmieni jego format, okienko napisze
   „The coach could not read this position” — wtedy trzeba zaktualizować wtyczkę.

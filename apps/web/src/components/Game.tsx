@@ -6,6 +6,7 @@ import { WaitingRoom } from "./Rooms.tsx";
 import { CardFace } from "./CardFace.tsx";
 import { GigArea, Mat, RivalHand, Strip, YourHand, cardData, type BoardCtx } from "./Board.tsx";
 import { ActionPanel, DecisionPanel, Inspector, LogPanel, OptionsModal, TrashModal, phaseText } from "./Panels.tsx";
+import { CARD_PICK_TYPES, CardPick } from "./CardPick.tsx";
 
 const RESULT_REASON: Record<string, string> = {
   gig_victory: "Gig victory",
@@ -446,6 +447,8 @@ export function Game({ gameId }: { gameId: string }) {
   if (!state || !db) return <div className="center-msg">Connecting…</div>;
 
   const choosing = !!state.choice && state.view.gamePhase !== "setup";
+  // Searching the deck, revealed cards…: a window over the table instead of the side panel.
+  const cardPick = choosing && CARD_PICK_TYPES.has(state.choice!.type) && state.choice!.chooserId === state.you;
   const view = (card: CardView) => setInspect({ definitionId: card.definitionId, live: card });
 
   /** Generic, official table actions for a card — not filtered by legality (the engine judges). */
@@ -639,7 +642,7 @@ export function Game({ gameId }: { gameId: string }) {
           )}
           <YourHand ctx={ctx} />
         </div>
-        <aside className={`sidebar ${logOpen ? "open" : ""} ${choosing ? "has-decision" : ""}`}>
+        <aside className={`sidebar ${logOpen ? "open" : ""} ${choosing && !cardPick ? "has-decision" : ""}`}>
           <button className="btn small mobile-only sheet-close" onClick={() => setLogOpen(false)}>
             Close
           </button>
@@ -652,6 +655,16 @@ export function Game({ gameId }: { gameId: string }) {
         </aside>
       </div>
 
+      {cardPick && (
+        <CardPick
+          key={state.view.stateID}
+          s={state}
+          db={db}
+          send={sendCommand}
+          sendAction={sendAction}
+          onPreview={(card, rect) => setPreview(card && rect ? { card, rect, touch: false } : null)}
+        />
+      )}
       {targeting && (
         <div className="targeting-bar">
           Attack target{" "}

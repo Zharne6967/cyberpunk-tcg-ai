@@ -548,3 +548,27 @@ a { color: var(--cyan); }
 .coach-why { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 2px; border-top: 1px solid var(--line); }
 .coach-why .good { color: var(--coach); }
 .coach-why .cost { color: #ff8aa8; }
+
+/* ---------- picking cards off the table (search, reveal, play / move a card) ---------- */
+.pick-overlay { position: fixed; inset: 0; z-index: 30; background: #000a; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.pick-window { background: var(--panel); border: 1px solid var(--yellow); border-radius: 8px; box-shadow: 0 0 40px #f5e60026; padding: 16px 18px; max-width: min(980px, 100%); max-height: 92vh; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+.pick-head h2 { margin: 0; font-size: 20px; letter-spacing: .1em; text-transform: uppercase; color: var(--yellow); }
+.pick-source { font-weight: 700; color: var(--cyan); }
+.pick-rules { font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+.pick-count { color: var(--yellow); font-weight: 700; }
+.pick-cards { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.pick-card { position: relative; padding: 0; border: 0; background: none; border-radius: 8px; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease, opacity .12s; }
+.pick-card.eligible { box-shadow: 0 0 0 2px var(--cyan); }
+.pick-card.eligible:hover { transform: translateY(-4px); }
+.pick-card.picked { box-shadow: 0 0 0 3px var(--yellow), 0 0 18px #f5e60066; transform: translateY(-6px); }
+.pick-card.off { opacity: .35; cursor: default; }
+.pick-overlay[hidden] { display: none; }
+.pick-card .card-face.md { width: clamp(70px, min(15vw, 24vh), 150px); height: auto; aspect-ratio: 5 / 7; }
+.pick-tag { position: absolute; top: 6px; right: 6px; background: var(--yellow); color: #0a0a0a; font-weight: 800; font-size: 11px; padding: 2px 6px; border-radius: 3px; }
+.pick-actions { display: flex; gap: 8px; align-items: center; }
+.pick-bar { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 30; display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--yellow); border-radius: 6px; padding: 6px 10px; font-weight: 700; }
+@media (max-width: 760px) {
+  .pick-window { padding: 10px; }
+  .pick-cards { gap: 6px; }
+  .pick-card .card-face.md { width: min(27vw, 30vh); }
+}

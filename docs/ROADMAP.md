@@ -50,7 +50,10 @@ Zrobione (wersja 1, 2026-11-08):
 Do zrobienia w etapie 4:
 - animacja losowania pierwszego gracza; animacje zagrania/ataku (karta „leci” na miejsce);
 - dopracowanie wyglądu maty (kształty kości, opcjonalny własny skan maty jako tło), układ dla ekranów < 900 px wysokości;
-- wybór celów efektów kliknięciem na stole z lepszą informacją zwrotną; Scry jako przeciąganie kart;
+- wybór celów efektów kliknięciem na stole z lepszą informacją zwrotną;
+- ✅ (2026-11-09) wybór kart spoza stołu (przeszukanie talii / Scry, Reveal, zagraj lub przenieś kartę) w oknie na
+  środku stołu jak na cyberpunk-tcg-sim.online: duże karty, kwalifikujące się podświetlone, reszta przygaszona,
+  zasada i licznik („Hand: Gear with cost 2 or less, up to 2 (1/2)”), Done, Hide (okno chowa się, wybór zostaje);
 - ręczny test całej partii przez gracza i poprawki z jego uwag.
 
 ## Wdrożenie online — stan (2026-11-09)

@@ -3,6 +3,7 @@ import type { CardView, GameStateMessage, LogLine, UiAction } from "@cpai/core/p
 import { COLOR_NAME, TYPE_NAME, type CardDb } from "../api.ts";
 import { CardFace } from "./CardFace.tsx";
 import { cardData } from "./Board.tsx";
+import { CARD_PICK_TYPES } from "./CardPick.tsx";
 
 type Send = (move: string, args?: Record<string, unknown>) => void;
 
@@ -81,7 +82,8 @@ function choiceIds(a: UiAction): string[] {
 /** The decision the rules ask you to make right now (targets, pending effects, Gig choices…). */
 export function DecisionPanel({ s, db, send, sendAction, onHover }: { s: GameStateMessage; db: CardDb; send: Send; sendAction: (a: UiAction) => void; onHover: (ids: string[]) => void }) {
   const choice = s.choice;
-  if (!choice || s.view.gamePhase === "setup") return null;
+  // Picking among cards off the table has its own window (CardPick).
+  if (!choice || s.view.gamePhase === "setup" || CARD_PICK_TYPES.has(choice.type)) return null;
   const source = (choice.payload as { source?: { displayName?: string; rulesText?: string } } | undefined)?.source;
   const acts = s.actions.filter((a) => a.group === "choice" || a.move === "gainGig");
   return (
@@ -93,7 +95,6 @@ export function DecisionPanel({ s, db, send, sendAction, onHover }: { s: GameSta
           {source.rulesText ? <div className="small">{source.rulesText}</div> : null}
         </div>
       )}
-      {choice.type === "scry" && <ScryPicker s={s} db={db} send={send} />}
       {choice.type === "preventGigSteal" && <PreventStealPicker s={s} send={send} />}
       <div className="decision-buttons">
         {acts.map((a) => (
@@ -154,50 +155,6 @@ export function ActionPanel({ s, sendAction, onHover }: { s: GameStateMessage; s
   );
 }
 
-const ZONE_NAME: Record<string, string> = { hand: "Hand", trash: "Trash", deckTop: "Top of deck", deckBottom: "Bottom of deck", field: "Field", eddieArea: "Eddies" };
-
-function ScryPicker({ s, db, send }: { s: GameStateMessage; db: CardDb; send: Send }) {
-  const p = s.choice!.payload as {
-    revealedCards: CardView[];
-    destinations: { zone: string; min?: number; max?: number; remainder?: boolean; eligibleCardIds: string[]; eligibilityLabel: string }[];
-  };
-  const pickable = p.destinations.filter((d) => !d.remainder);
-  const remainder = p.destinations.find((d) => d.remainder);
-  const [assign, setAssign] = useState<Record<string, string>>({});
-  const submit = () => {
-    const destinations = pickable.map((d) => ({ zone: d.zone, cardIds: Object.entries(assign).filter(([, z]) => z === d.zone).map(([id]) => id) }));
-    if (remainder) destinations.push({ zone: remainder.zone, cardIds: p.revealedCards.map((c) => c.instanceId).filter((id) => !assign[id]) });
-    send("resolveScry", { destinations });
-  };
-  return (
-    <div className="scry">
-      {p.revealedCards.map((c) => {
-        const opts = pickable.filter((d) => d.eligibleCardIds.includes(c.instanceId));
-        return (
-          <div key={c.instanceId} className="scry-row">
-            <div className="scry-card">
-              <CardFace card={cardData(db, c)} size="sm" showText={false} />
-            </div>
-            <div>
-              <div>{c.cardName}</div>
-              <select value={assign[c.instanceId] ?? ""} onChange={(e) => setAssign({ ...assign, [c.instanceId]: e.target.value })}>
-                <option value="">{remainder ? ZONE_NAME[remainder.zone] ?? remainder.zone : "—"}</option>
-                {opts.map((d) => (
-                  <option key={d.zone} value={d.zone}>
-                    {ZONE_NAME[d.zone] ?? d.zone}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        );
-      })}
-      <button className="btn primary" onClick={submit}>
-        Confirm
-      </button>
-    </div>
-  );
-}
 
 function PreventStealPicker({ s, send }: { s: GameStateMessage; send: Send }) {
   const p = s.choice!.payload as { stealEntries: { dieId: string; value: number }[]; handEntries: { cardId: string; cost: number }[] };
