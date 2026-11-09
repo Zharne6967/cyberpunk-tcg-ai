@@ -214,6 +214,12 @@ Do zrobienia:
 3. Ocena pozycji: więcej cech (np. koszty kart w Fixerze/Overtime), trening na partiach ISMCTS zamiast greedy (etap 6).
 4. **Cel gracza (2026-11-09): nasz bot i trener we wtyczce mają być silniejsi niż „Rogue AI” na choombattler.com.**
    Najpierw sprawdzić, jak tam się z nim gra i czy da się rozegrać serię partii (wynik = miara), potem strojenie.
+   Ustalenia (2026-11-09): Rogue AI = konto „o7” (bot zatwierdzony przez stronę, uczony self-play jak AlphaGo,
+   97,4% wygranych z 620 graczami). **Regulamin ChoomBattlera: program może tam grać tylko za zgodą
+   administratorów („An account found playing by program without permission is banned”)** — więc nasz bot nie
+   gra tam bez zgody (droga: prośba do contact@choombattler.ch / Discord). o7 **zmienia talie między meczami**
+   (np. Viktor Vektor / River Ward / Adam Smasher, wcześniej Green-Green-Red), a pełnych list strona nie pokazuje
+   (gracz sam decyduje o odsłonięciu talii po grze; o7 nie odsłania) — widać tylko karty, które zagrał/odsłonił.
 
 ## Etap 2 — notatki techniczne
 - Serwer liczy listę legalnych akcji silnikiem (`enumerateCandidateActions` / `enumerateChoiceActions`)
