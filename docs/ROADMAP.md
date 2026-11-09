@@ -85,7 +85,14 @@ Do sprawdzenia przy okazji: ekran ładowania po uśpieniu serwera (po ~15 min be
   cyberpunk-tcg-sim.online) i pokazuje najlepsze zagranie + wyjaśnienie, liczone naszym uczciwym botem
   (tylko informacje widoczne dla gracza). Cel: nauka gry (gracz uczy kolegę, także w ich wspólnych partiach).
   Decyzja gracza: prosty przełącznik **włącz/wyłącz**, bez blokad trybów; widoczny znaczek „Coach ON”, gdy działa.
-  Ten sam „trener” także w naszej aplikacji (podpowiedź najlepszego ruchu + wyjaśnienie, opcjonalnie w grze ze znajomym).
+  ✅ **Trener w aplikacji** (2026-11-09): przełącznik **Coach** w grze; najlepszy ruch (zielona ramka, klik =
+  wykonaj), 2 alternatywy z szansą na wygraną, plan na resztę tury; w grze ze znajomym rywal widzi „Coach ON”.
+  Jak to działa (uczciwie): serwer wysyła przeglądarce jeden świat wylosowany z tego, co gracz wie
+  (`coachWorld` w `packages/ai/src/coach.ts`: determinizacja + przetasowane id ukrytych kart, nowe ziarno losowe),
+  przeglądarka liczy ISMCTS w Web Workerze (`coach-worker.ts`, ~1000 symulacji / 2,5 s; na telefonie 600 / 2 s).
+  Testy `coach.test.ts`: świat zależy tylko od informacji gracza, id ukrytych kart przetasowane, ruchy legalne;
+  `pnpm selftest 2 friend`: rywal widzi Coach ON, świat tylko dla właściciela miejsca z włączonym trenerem.
+  Do zrobienia: krótkie wyjaśnienie „dlaczego” (np. różnica szans względem Pass), trener we wtyczce.
   Ryzyko techniczne: odczyt stanu z cudzej strony (DOM/WebSocket) bywa kruchy przy jej zmianach.
 
 ## Etap 5c — Analiza talii rywala i kontr-talia

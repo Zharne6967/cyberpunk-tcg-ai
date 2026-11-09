@@ -209,6 +209,18 @@ const server = createServer(async (req, res) => {
       const job = analysisJob(p.slice("/api/analyze/".length));
       return job ? sendJson(res, 200, job) : sendJson(res, 404, { error: "This analysis is no longer available (was the server restarted?)" });
     }
+    // Coach: a world sampled from what this seat knows; the player's browser searches it.
+    const coach = /^\/api\/games\/([\w-]+)\/coach$/.exec(p);
+    if (coach && req.method === "GET") {
+      const g = games.get(coach[1]!);
+      const seat = g?.seatForToken(String(req.headers["x-seat-token"] ?? ""));
+      if (!g || !seat) return sendJson(res, 404, { error: "Game not found" });
+      try {
+        return sendJson(res, 200, g.coachWorldFor(seat));
+      } catch (e) {
+        throw new UserError((e as Error).message);
+      }
+    }
     if (p.startsWith("/api/games/") && req.method === "GET") {
       const g = games.get(p.slice("/api/games/".length));
       return g ? sendJson(res, 200, { gameId: g.id, mode: g.mode, started: g.started }) : sendJson(res, 404, { error: "Game not found (was the server restarted?)" });
@@ -290,6 +302,7 @@ server.on("upgrade", (req, socket, head) => {
       else if (msg.type === "command") game.handleCommand(seat, msg.move, msg.args, msg.stateID);
       else if (msg.type === "intent") game.handleIntent(seat, msg.intent, msg.stateID);
       else if (msg.type === "setBotSpeed" && game.mode === "bot") game.botDelayMs = Math.max(0, Math.min(5000, Number(msg.ms) || 0));
+      else if (msg.type === "coach") game.setCoach(seat, msg.on === true);
       else if (msg.type === "concede") game.concede(seat);
     });
     ws.on("close", unsubscribe);

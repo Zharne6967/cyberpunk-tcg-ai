@@ -111,6 +111,8 @@ export const api = {
     const bot = req.botDeckData ? { deck: req.botDeckData } : await deckRef(req.botDeck);
     return getJson<SeatTicket>("/api/games", json("POST", { ...req, ...(you.deck ? { yourDeckData: you.deck } : {}), ...(bot.deck ? { botDeckData: bot.deck } : {}) })).then(rememberSeat);
   },
+  /** Coach: a world sampled from what your seat knows (your seat's token proves who you are). */
+  coachWorld: (gameId: string) => getJson<unknown>(`/api/games/${encodeURIComponent(gameId)}/coach`, { headers: { "x-seat-token": seatTicket(gameId)?.token ?? "" } }),
   gameExists: (id: string) => getJson<{ gameId: string; mode: string; started: boolean }>(`/api/games/${id}`),
   createRoom: async (req: { deckId: string; name?: string }) => getJson<SeatTicket>("/api/rooms", json("POST", { name: req.name, ...(await deckRef(req.deckId)) })).then(rememberSeat),
   roomByCode: (code: string) => getJson<{ gameId: string; invite: string }>(`/api/rooms/code/${encodeURIComponent(code)}`),

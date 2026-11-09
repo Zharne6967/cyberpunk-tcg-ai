@@ -55,11 +55,26 @@ const post = async <T>(path: string, body: unknown): Promise<T> => {
 };
 
 /** Play one seat (identified by its token) with random legal moves until the game ends. */
-function playSeat(gameId: string, token: string, label: string): Promise<{ last: GameStateMessage; moves: number; errors: number; choices: Set<string> }> {
+/** Coach checks: coach on = fetch the sampled world once; coach off = the world must be refused. */
+async function checkCoach(gameId: string, token: string, coachOn: boolean): Promise<void> {
+  const r = await fetch(`${base}/api/games/${gameId}/coach`, { headers: { "x-seat-token": token } });
+  if (!coachOn) {
+    if (r.ok) throw new Error("coach world handed out with the coach off");
+    return;
+  }
+  const w = (await r.json()) as { stateID?: number; world?: { G?: unknown }; error?: string };
+  if (!r.ok || !w.world?.G || typeof w.stateID !== "number") throw new Error(`coach world failed: ${w.error ?? r.status}`);
+  const wrong = await fetch(`${base}/api/games/${gameId}/coach`, { headers: { "x-seat-token": "wrong" } });
+  if (wrong.ok) throw new Error("coach world handed out for a wrong token");
+}
+
+function playSeat(gameId: string, token: string, label: string, opts: { coach?: boolean } = {}): Promise<{ last: GameStateMessage; moves: number; errors: number; choices: Set<string>; rivalCoachSeen: boolean; coachChecked: boolean }> {
   const ws = new WebSocket(`ws://127.0.0.1:${process.env.PORT}/ws?game=${gameId}&token=${encodeURIComponent(token)}`);
   let moves = 0;
   let errors = 0;
   const choices = new Set<string>();
+  let rivalCoachSeen = false;
+  let coachChecked = false;
   return new Promise((resolve, reject) => {
     let lastSent = -1;
     let lastMsg: GameStateMessage | undefined;
@@ -68,7 +83,10 @@ function playSeat(gameId: string, token: string, label: string): Promise<{ last:
       const info = m ? `sid=${m.view.stateID} phase=${m.view.gamePhase} turn=${m.view.turnNumber} active=${m.view.activePlayerId} status=${m.promptStatus} choice=${m.choice?.type ?? "-"} actions=${JSON.stringify(m.actions).slice(0, 400)} log=${m.log.slice(-3).map((l) => l.text).join(" | ")}` : "no state";
       reject(new Error(`${label} ${gameId} timed out: ${info}`));
     }, Number(process.env.SELFTEST_TIMEOUT ?? 120_000));
-    ws.on("open", () => ws.send(JSON.stringify({ type: "setBotSpeed", ms: 0 })));
+    ws.on("open", () => {
+      ws.send(JSON.stringify({ type: "setBotSpeed", ms: 0 }));
+      if (opts.coach) ws.send(JSON.stringify({ type: "coach", on: true }));
+    });
     ws.on("message", (raw) => {
       const msg = JSON.parse(String(raw)) as ServerMessage;
       if (msg.type === "error") {
@@ -84,10 +102,15 @@ function playSeat(gameId: string, token: string, label: string): Promise<{ last:
       }
       if (msg.type !== "state") return;
       lastMsg = msg;
+      if (msg.coach.rival) rivalCoachSeen = true;
+      if (!coachChecked && msg.view.gamePhase !== "setup" && (msg.promptStatus === "action" || msg.promptStatus === "choice") && msg.coach.you === !!opts.coach) {
+        coachChecked = true;
+        checkCoach(gameId, token, !!opts.coach).catch(reject);
+      }
       if (msg.result) {
         clearTimeout(timer);
         ws.close();
-        resolve({ last: msg, moves, errors, choices });
+        resolve({ last: msg, moves, errors, choices, rivalCoachSeen, coachChecked });
         return;
       }
       if (msg.choice) choices.add(msg.choice.type);
@@ -123,13 +146,16 @@ async function playOne(i: number) {
     if (found.gameId !== host.gameId) throw new Error("room code lookup failed");
     const info = (await (await fetch(`${base}/api/rooms/${host.gameId}?invite=${host.invite}`)).json()) as { status: string };
     if (info.status !== "waiting") throw new Error(`room status ${info.status}`);
-    const hostRun = playSeat(host.gameId, host.token, "host");
+    const hostRun = playSeat(host.gameId, host.token, "host", { coach: true });
     const guest = await post<SeatTicket>(`/api/rooms/${host.gameId}/join`, { invite: host.invite, deckText: otherList, name: "Guest" });
     // A wrong invite must not let anyone in.
     const bad = await fetch(`${base}/api/rooms/${host.gameId}/join`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ invite: "nope", deckId: yourDeck }) });
     if (bad.ok) throw new Error("joined with a wrong invite");
     const [h, g] = await Promise.all([hostRun, playSeat(guest.gameId, guest.token, "guest")]);
     if ((h.last.result!.winner === "you") === (g.last.result!.winner === "you") && h.last.result!.winner !== "draw") throw new Error("both seats report the same winner");
+    // The host played with the coach on: the guest saw it, the host got its world, the guest (coach off) did not.
+    if (!g.rivalCoachSeen) throw new Error("the guest never saw the host's Coach ON");
+    if (!h.coachChecked || !g.coachChecked) throw new Error("coach checks did not run");
     console.log(`friend game ${i + 1} (${host.gameId}): ${yourDeck} vs ${otherDeck} → host ${h.last.result!.winner} (${h.last.result!.reason}), turn ${h.last.view.turnNumber}, moves ${h.moves}+${g.moves}, errors ${h.errors}+${g.errors}, choices: ${[...new Set([...h.choices, ...g.choices])].join(",") || "-"}`);
     return;
   }

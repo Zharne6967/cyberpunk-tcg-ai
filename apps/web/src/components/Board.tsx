@@ -22,6 +22,8 @@ export interface BoardCtx {
   hints: boolean;
   actionsByCard: Map<string, UiAction[]>;
   highlight: Set<string>;
+  /** Coach: the card(s) of the recommended move. */
+  coachPick: Set<string>;
   onCardClick: (card: CardView, anchor: HTMLElement) => void;
   onGigAreaClick: (seat: string) => void;
   onInspect: (card: CardView) => void;
@@ -126,6 +128,7 @@ export function TableCard({ c, ctx, size = "md", dragFrom, dropTarget }: { c: Ca
     c.spent ? "spent" : "",
     acts?.length ? "actionable" : "",
     ctx.highlight.has(c.instanceId) ? "hl" : "",
+    ctx.coachPick.has(c.instanceId) ? "coach-pick" : "",
     ctx.state.rivalLastCardIds.includes(c.instanceId) ? "bot-last" : "",
     dragFrom && !(c.faceDown && !data) ? "draggable" : "",
   ].join(" ");
@@ -242,7 +245,7 @@ function Die({ d, ctx, empty, type }: { d?: CardView; ctx: BoardCtx; empty?: boo
   const acts = ctx.hints ? ctx.actionsByCard.get(d.instanceId) : undefined;
   return (
     <button
-      className={`die die-${type} ${d.zone === "gigArea" ? "gig" : ""} ${acts?.length ? "actionable" : ""} ${ctx.highlight.has(d.instanceId) ? "hl" : ""} ${ctx.state.rivalLastCardIds.includes(d.instanceId) ? "bot-last" : ""}`}
+      className={`die die-${type} ${d.zone === "gigArea" ? "gig" : ""} ${acts?.length ? "actionable" : ""} ${ctx.highlight.has(d.instanceId) ? "hl" : ""} ${ctx.coachPick.has(d.instanceId) ? "coach-pick" : ""} ${ctx.state.rivalLastCardIds.includes(d.instanceId) ? "bot-last" : ""}`}
       title={d.zone === "gigArea" ? `${type.toUpperCase()}: ${d.power}` : type.toUpperCase()}
       onClick={(e) => {
         e.stopPropagation();

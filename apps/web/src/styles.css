@@ -525,3 +525,23 @@ a { color: var(--cyan); }
   .lobby-top { flex-wrap: wrap; gap: 8px; }
   .an-matchups td:last-child { display: none; }
 }
+
+/* ---------- coach ---------- */
+:root { --coach: #3dff9a; }
+.tag.coach-on { background: #0d2b1c; color: var(--coach); border: 1px solid #3dff9a66; font-weight: 700; white-space: nowrap; }
+.coach-panel { border-color: #3dff9a55; display: flex; flex-direction: column; gap: 6px; flex: none; }
+.coach-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.coach-head > span:first-child { color: var(--coach); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; font-size: 12px; }
+.btn.act.coach-move { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; font-size: 12.5px; }
+.coach-move b { color: var(--muted); font-variant-numeric: tabular-nums; }
+.btn.act.coach-move.best { border-color: var(--coach); box-shadow: inset 3px 0 0 var(--coach); }
+.coach-move.best b { color: var(--coach); }
+.coach-plan { color: var(--text); line-height: 1.35; }
+.tcard.coach-pick > .tcard-inner > .card-face, .tcard.coach-pick > .card-face { box-shadow: 0 0 0 2px var(--coach), 0 0 16px #3dff9a88; }
+.die.coach-pick { filter: drop-shadow(0 0 6px var(--coach)); }
+.coach-inline { display: none; }
+@media (max-width: 760px) {
+  .coach-inline { display: block; }
+  .coach-panel.compact { padding: 6px 8px; gap: 4px; }
+  .sidebar .coach-panel { display: none; }
+}

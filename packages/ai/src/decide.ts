@@ -1,4 +1,4 @@
-import { AIPlayer, LocalEngine, setCardRegistry, type MatchState, type PlayerId } from "@tcg/cyberpunk-engine";
+import { AIPlayer, LocalEngine, allMoves, manualMoves, registerMoves, setCardRegistry, type MatchState, type PlayerId } from "@tcg/cyberpunk-engine";
 import { getCatalog } from "@cpai/core";
 import { getBot, getStrategy } from "./strategies.ts";
 import type { Action } from "./ismcts/actions.ts";
@@ -19,6 +19,9 @@ let registryReady = false;
 export function ensureRegistry(): void {
   if (registryReady) return;
   setCardRegistry(getCatalog().engineCatalog);
+  // The lean simulation path (processCommandLean) needs the moves even when no LocalEngine was created
+  // in this thread yet (e.g. the coach's Web Worker).
+  registerMoves({ ...allMoves, ...manualMoves });
   registryReady = true;
 }
 

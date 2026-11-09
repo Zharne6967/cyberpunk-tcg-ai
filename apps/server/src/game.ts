@@ -14,7 +14,7 @@ import {
   type GameEvent,
   type PlayerId,
 } from "@tcg/cyberpunk-engine";
-import { KnowledgeTracker, STRATEGIES, decideBotCommand, expandAtomicGigAdjust, publicWinChance } from "@cpai/ai";
+import { KnowledgeTracker, STRATEGIES, coachWorld, decideBotCommand, expandAtomicGigAdjust, publicWinChance, type CoachWorld } from "@cpai/ai";
 import { getCatalog, toEngineDeckList, type Deck } from "@cpai/core";
 import type { GameStateMessage, Intent, LogLine, MatchView, ServerMessage, UiAction } from "@cpai/core/protocol";
 import { botPool } from "./bot-pool.ts";
@@ -80,8 +80,11 @@ export class GameSession {
   private lastMove: { seat: SeatId; cardIds: string[] } | null = null;
   private botThinking = false;
   private pumping = false;
-  /** What the bot's seat has been shown so far (the only hidden-card knowledge fair bots get). */
-  private botKnowledge: KnowledgeTracker | null = null;
+  /** What each seat has been shown so far: the only hidden-card knowledge fair bots and the coach get. */
+  private knowledge: Record<SeatId, KnowledgeTracker> | null = null;
+  /** Coach switched on per seat (both players see it); coachUsed: was it ever on (saved with the game). */
+  private coachOn: Record<SeatId, boolean> = { p1: false, p2: false };
+  private coachUsed = new Set<SeatId>();
   private botInfo: GameStateMessage["botInfo"] = null;
   botDelayMs = 700;
   lastActivity = Date.now();
@@ -154,11 +157,8 @@ export class GameSession {
       matchId: this.id,
     });
     this.engine = new LocalEngine(state);
-    const bot = this.botSeat();
-    if (bot) {
-      this.botKnowledge = new KnowledgeTracker(pid(bot));
-      this.botKnowledge.observe(this.engine.getState());
-    }
+    this.knowledge = { p1: new KnowledgeTracker(pid("p1")), p2: new KnowledgeTracker(pid("p2")) };
+    for (const seat of SEATS) this.knowledge[seat].observe(this.engine.getState());
     this.pushSystem(`${p1.deck!.name} vs ${p2.deck!.name}`);
     this.refreshActions();
     void this.pump();
@@ -222,6 +222,7 @@ export class GameSession {
       rivalLastCardIds: this.lastMove && this.lastMove.seat === rival ? this.lastMove.cardIds : [],
       botInfo: rivalSeat.kind === "bot" ? this.botInfo : null,
       winChance: view.gamePhase === "setup" ? null : publicWinChance(view as never, seat),
+      coach: { you: this.coachOn[seat], rival: this.coachOn[rival] },
       result,
     };
   }
@@ -309,7 +310,7 @@ export class GameSession {
     const result = engine.processCommand({ commandID: `${seat}-${this.commands.length}`, move: move as never, input: args ? { args } : undefined } as never, pid(seat));
     if (!result.success) return result;
     this.commands.push({ seat, move, args, turn: turnBefore, ms });
-    this.botKnowledge?.observe(engine.getState());
+    if (this.knowledge) for (const seat of SEATS) this.knowledge[seat].observe(engine.getState());
     this.appendEvents(result.gameEvents);
     this.lastActivity = Date.now();
     const a = args ?? {};
@@ -446,7 +447,7 @@ export class GameSession {
         this.broadcast();
         const started = Date.now();
         const seed = `${this.seed}:${this.commands.length}`;
-        let decision = await botPool.decide(this.engine.getState(), bot, strategy, seed, this.botKnowledge?.ids() ?? []).catch((err: Error) => {
+        let decision = await botPool.decide(this.engine.getState(), bot, strategy, seed, this.knowledge?.[bot].ids() ?? []).catch((err: Error) => {
           console.error("[bot] worker error:", err.message);
           return null;
         });
@@ -495,6 +496,7 @@ export class GameSession {
       bot: this.seats.p2.strategy ?? null,
       seats: { p1: this.seats.p1.kind, p2: this.seats.p2.kind },
       names: { p1: this.seats.p1.name, p2: this.seats.p2.name },
+      coachUsed: [...this.coachUsed],
       decks: { p1: this.seats.p1.deck, p2: this.seats.p2.deck },
       turns: s.G.turnMetadata.turnNumber,
       result: s.G.gameEnded ? { winner: s.G.winnerId, reason: s.G.winReason } : null,
@@ -505,6 +507,22 @@ export class GameSession {
     } catch (err) {
       console.error("[game] save failed", err);
     }
+  }
+
+  // ---------------------------------------------------------------- coach
+  /** Coach on/off for a human seat; the rival sees it ("Coach ON"). */
+  setCoach(seat: SeatId, on: boolean) {
+    if (this.seats[seat].kind !== "human" || this.coachOn[seat] === on) return;
+    this.coachOn[seat] = on;
+    if (on) this.coachUsed.add(seat);
+    this.broadcast();
+  }
+
+  /** A world sampled from what this seat knows (see coachWorld); only while its coach is on. */
+  coachWorldFor(seat: SeatId): CoachWorld {
+    if (!this.engine || !this.knowledge) throw new Error("The game has not started yet.");
+    if (!this.coachOn[seat]) throw new Error("Turn the coach on first.");
+    return coachWorld(this.engine.getState(), pid(seat), this.knowledge[seat].ids(), randomUUID());
   }
 
   dispose() {

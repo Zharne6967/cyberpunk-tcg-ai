@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CardView, ClientMessage, GameStateMessage, Intent, ServerMessage, UiAction, WaitingMessage } from "@cpai/core/protocol";
+import { coachKey, type CardView, type ClientMessage, type CoachAdvice, type CoachMove, type GameStateMessage, type Intent, type ServerMessage, type UiAction, type WaitingMessage } from "@cpai/core/protocol";
 import { api, loadCardDb, seatTicket, type CardDb } from "../api.ts";
+import { askCoach, stopCoach } from "../coach.ts";
 import { WaitingRoom } from "./Rooms.tsx";
 import { CardFace } from "./CardFace.tsx";
 import { GigArea, Mat, RivalHand, Strip, YourHand, cardData, type BoardCtx } from "./Board.tsx";
@@ -77,6 +78,64 @@ function useGameSocket(gameId: string) {
 
   const send = useCallback((msg: ClientMessage) => wsRef.current?.readyState === WebSocket.OPEN && wsRef.current.send(JSON.stringify(msg)), []);
   return { state, waiting, ticket, toast, options, setOptions, conn, send };
+}
+
+const pct = (x: number | null) => (x === null ? "" : `${Math.round(x * 100)}%`);
+
+/** The coach's advice: best move (click = play it), alternatives, the rest of the turn's plan. */
+function CoachPanel({
+  loading,
+  error,
+  advice,
+  items,
+  onPlay,
+  onHover,
+  compact,
+}: {
+  loading: boolean;
+  error?: string;
+  advice?: CoachAdvice;
+  items: { move: CoachMove; action?: UiAction }[];
+  onPlay: (a: UiAction) => void;
+  onHover: (ids: string[]) => void;
+  compact?: boolean;
+}) {
+  const ids = (m: CoachMove) => [m.cardId, m.targetId].filter((x): x is string => !!x);
+  const row = (it: { move: CoachMove; action?: UiAction }, best: boolean) => (
+    <button
+      key={it.move.key}
+      className={`btn act coach-move ${best ? "best" : ""}`}
+      disabled={!it.action}
+      onClick={() => it.action && onPlay(it.action)}
+      onMouseEnter={() => onHover(ids(it.move))}
+      onMouseLeave={() => onHover([])}
+    >
+      <span>{it.move.label}</span>
+      <b>{pct(it.move.winRate)}</b>
+    </button>
+  );
+  return (
+    <div className={`panel coach-panel ${compact ? "compact" : ""}`}>
+      <div className="coach-head">
+        <span>Coach</span>
+        {loading && <span className="small muted">Thinking…</span>}
+        {!loading && advice && advice.iterations > 0 && <span className="small muted">{advice.iterations} simulations</span>}
+      </div>
+      {error ? (
+        <div className="small muted">{error}</div>
+      ) : items.length ? (
+        <>
+          {items.slice(0, compact ? 1 : 3).map((it, i) => row(it, i === 0))}
+          {advice && advice.plan.length > 0 && (
+            <div className="coach-plan small">
+              <span className="muted">Then: </span>
+              {advice.plan.join(" → ")}
+            </div>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 /** Start of the game: CR 7.5 (a random player decides who goes first) and the opening hand. */
@@ -267,6 +326,58 @@ export function Game({ gameId }: { gameId: string }) {
     if (conn === "open") send({ type: "setBotSpeed", ms: speed });
   }, [conn, speed, send]);
 
+  // ---- Coach: your best move, searched in this browser from what you know (the rival sees "Coach ON").
+  const [coachOn, setCoachOn] = useState(() => {
+    try {
+      return localStorage.getItem("cpai.coach") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [coach, setCoach] = useState<{ stateID: number; advice?: CoachAdvice; error?: string } | null>(null);
+  const serverCoach = state?.coach.you;
+  useEffect(() => {
+    if (conn === "open" && serverCoach !== undefined && serverCoach !== coachOn) send({ type: "coach", on: coachOn });
+  }, [conn, serverCoach, coachOn, send]);
+  const coachTurn = !!state && !state.result && (state.promptStatus === "action" || state.promptStatus === "choice") && state.actions.length > 0;
+  const stateID = state?.view.stateID;
+  // A single legal move needs no search.
+  const onlyAction = state && state.actions.length === 1 ? state.actions[0]! : null;
+  useEffect(() => {
+    if (!coachOn || !serverCoach || !coachTurn || stateID === undefined) {
+      setCoach(null);
+      return;
+    }
+    if (onlyAction) {
+      const m: CoachMove = { key: coachKey(onlyAction.move, onlyAction.args), move: onlyAction.move, args: onlyAction.args, label: onlyAction.label, cardId: onlyAction.cardId, targetId: onlyAction.targetId, visits: 0, winRate: null };
+      setCoach({ stateID, advice: { stateID, moves: [m], plan: [], iterations: 0, ms: 0 } });
+      return;
+    }
+    let live = true;
+    setCoach({ stateID });
+    const t = setTimeout(() => {
+      api
+        .coachWorld(gameId)
+        .then((world) => askCoach(world))
+        .then((advice) => live && setCoach({ stateID, advice }))
+        .catch((e: Error) => live && e.name !== "AbortError" && setCoach({ stateID, error: e.message }));
+    }, 150);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [coachOn, serverCoach, coachTurn, stateID, gameId]);
+  useEffect(() => () => stopCoach(), []);
+  const coachAdvice = coach && coach.stateID === stateID ? coach.advice : undefined;
+  const coachActions = useMemo(() => {
+    const byKey = new Map((state?.actions ?? []).map((a) => [coachKey(a.move, a.args), a]));
+    return (coachAdvice?.moves ?? []).map((m) => ({ move: m, action: byKey.get(m.key) }));
+  }, [coachAdvice, state?.actions]);
+  const coachPick = useMemo(() => {
+    const best = coachAdvice?.moves[0];
+    return new Set([best?.cardId, best?.targetId].filter((x): x is string => !!x));
+  }, [coachAdvice]);
+
   const actionsByCard = useMemo(() => {
     const m = new Map<string, UiAction[]>();
     for (const a of state?.actions ?? []) {
@@ -363,6 +474,7 @@ export function Game({ gameId }: { gameId: string }) {
     hints,
     actionsByCard,
     highlight: new Set([...hover, ...(menu ? [menu.card.instanceId] : []), ...(targeting ? [targeting.attackerId] : [])]),
+    coachPick,
     onCardClick: (card, anchor) => {
       if (targeting) {
         if (ownerOf(state, card.instanceId) === state.rival && card.zone === "field") sendIntent({ kind: "attack", cardId: targeting.attackerId, targetId: card.instanceId });
@@ -398,6 +510,8 @@ export function Game({ gameId }: { gameId: string }) {
         <span className="vs">
           {state.yourDeck} <b>vs</b> {state.rivalDeck} <span className="muted">({state.rivalLabel})</span>
         </span>
+        {state.coach.you && <span className="tag coach-on">Coach ON</span>}
+        {state.coach.rival && <span className="tag coach-on">{state.rivalLabel}: Coach ON</span>}
         <span className="spacer" />
         <button className="btn small mobile-only" onClick={(e) => (e.stopPropagation(), setLogOpen(!logOpen))}>
           Log
@@ -435,6 +549,21 @@ export function Game({ gameId }: { gameId: string }) {
             }}
           />{" "}
           Win chance
+        </label>
+        <label className="opt" title="Best move from what you know. Your rival sees Coach ON.">
+          <input
+            type="checkbox"
+            checked={coachOn}
+            onChange={(e) => {
+              setCoachOn(e.target.checked);
+              try {
+                localStorage.setItem("cpai.coach", e.target.checked ? "1" : "0");
+              } catch {
+                /* ignore */
+              }
+            }}
+          />{" "}
+          Coach
         </label>
         {state.mode === "bot" && (
         <label className="opt">
@@ -493,6 +622,11 @@ export function Game({ gameId }: { gameId: string }) {
             <GigArea seat={state.you} ctx={ctx} label="FRIENDLY GIGS" rival={false} />
           </Strip>
           <Mat seat={state.you} ctx={ctx} rival={false} />
+          {coachOn && coach && (
+            <div className="coach-inline">
+              <CoachPanel compact loading={!coach.advice && !coach.error} error={coach.error} advice={coachAdvice} items={coachActions} onPlay={sendAction} onHover={setHover} />
+            </div>
+          )}
           <YourHand ctx={ctx} />
         </div>
         <aside className={`sidebar ${logOpen ? "open" : ""} ${choosing ? "has-decision" : ""}`}>
@@ -500,6 +634,9 @@ export function Game({ gameId }: { gameId: string }) {
             Close
           </button>
           <LogPanel log={state.log} rivalName={state.rivalLabel} onCard={(definitionId) => setInspect({ definitionId })} />
+          {coachOn && coach && (
+            <CoachPanel loading={!coach.advice && !coach.error} error={coach.error} advice={coachAdvice} items={coachActions} onPlay={sendAction} onHover={setHover} />
+          )}
           <DecisionPanel s={state} db={db} send={sendCommand} sendAction={sendAction} onHover={setHover} />
           {hints && <ActionPanel s={state} sendAction={sendAction} onHover={setHover} />}
         </aside>

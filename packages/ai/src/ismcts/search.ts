@@ -41,8 +41,18 @@ export interface RootStat {
   value: number;
 }
 
+/** One step of the most visited line of the tree (who acts, what). */
+export interface LineStep {
+  actor: string;
+  action: Action;
+  visits: number;
+  value: number;
+}
+
 export interface SearchResult {
   stats: RootStat[];
+  /** Most visited path from the root (the search's expected continuation; steps with few visits are cut). */
+  line?: LineStep[];
   iterations: number;
   ms: number;
   /** Search was skipped: zero or one legal move. */
@@ -192,7 +202,15 @@ export function ismctsSearch(
     const e = root.edges.get(`${viewer as string}|${rootKeys[i]!}`);
     if (e) stats.push({ key: rootKeys[i]!, action: a, visits: e.visits, value: e.value });
   });
-  return { stats, iterations, ms: performance.now() - t0, trivial: false };
+  const line: LineStep[] = [];
+  for (let node: TreeNode = root; line.length < 10; ) {
+    let best: Edge | undefined;
+    for (const e of node.edges.values()) if (!best || e.visits > best.visits) best = e;
+    if (!best || best.visits < 4) break;
+    line.push({ actor: best.actor, action: best.action, visits: best.visits, value: best.value });
+    node = best.node;
+  }
+  return { stats, line, iterations, ms: performance.now() - t0, trivial: false };
 }
 
 function shuffled<T>(xs: T[], rand: () => number): T[] {

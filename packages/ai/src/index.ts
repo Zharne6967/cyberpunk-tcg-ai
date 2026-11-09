@@ -7,3 +7,5 @@ export * from "./ismcts/evaluation.ts";
 export * from "./ismcts/search.ts";
 export * from "./match.ts";
 export * from "./analysis.ts";
+export * from "./labels.ts";
+export * from "./coach.ts";

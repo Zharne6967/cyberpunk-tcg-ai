@@ -33,6 +33,11 @@ Stół wygląda jak dwie maty naprzeciw siebie: Twoja na dole, bota (obrócona) 
   (`pnpm calibrate`), więc to szacunek, nie wyrocznia. Na koniec partii — wykres szans tura po turze.
 - **Learning mode** (przełącznik u góry) — podświetla karty z legalnymi ruchami i pokazuje listę akcji.
   Domyślnie wyłączony: grasz jak na żywo i sam pamiętasz, co możesz zrobić.
+- **Coach** (przełącznik u góry) — trener: przy każdej Twojej decyzji pokazuje najlepszy ruch (zielona
+  ramka na karcie), 2 inne opcje z szansą na wygraną i dalszy plan na tę turę („Then: …”); klik w ruch go
+  wykonuje. Liczy ten sam uczciwy bot ISMCTS co poziomy Very Hard/Master, **tylko z tego, co Ty wiesz**,
+  i to w Twojej przeglądarce (~1000 symulacji w 2–3 s). Działa też w grze ze znajomym — wtedy rywal widzi
+  znaczek **Coach ON**.
 - Każda partia zapisuje się w `var/games/` — z tych zapisów bot będzie się uczył (etap 6).
 
 ## Deck Builder

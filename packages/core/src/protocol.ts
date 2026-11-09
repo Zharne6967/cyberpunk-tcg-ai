@@ -110,6 +110,8 @@ export interface GameStateMessage {
   winChance: number | null;
   /** Last ISMCTS search of the bot: simulations run and its estimated chance to win. */
   botInfo: null | { iterations: number; winRate: number; ms: number };
+  /** Coach switched on (yours, and the rival's: shown to both players). */
+  coach: { you: boolean; rival: boolean };
   result: null | { winner: "you" | "rival" | "draw"; reason: string | null };
 }
 
@@ -149,6 +151,7 @@ export type ClientMessage =
   | { type: "command"; move: string; args?: Record<string, unknown>; stateID: number }
   | { type: "intent"; intent: Intent; stateID: number }
   | { type: "setBotSpeed"; ms: number }
+  | { type: "coach"; on: boolean }
   | { type: "concede" };
 
 export interface DeckSummary {
@@ -336,4 +339,46 @@ export interface AnalysisJob {
   position?: number;
   report?: AnalysisReport;
   error?: string;
+}
+
+// ---- Coach (best move for your seat, computed in your browser from what you know)
+
+export interface CoachMove {
+  /** Same identity as an UiAction's move + args (see coachKey). */
+  key: string;
+  move: string;
+  args?: Record<string, unknown>;
+  label: string;
+  cardId?: string;
+  targetId?: string;
+  /** Simulations through this move. */
+  visits: number;
+  /** Estimated chance to win after this move (null: heuristic advice, e.g. the opening hand). */
+  winRate: number | null;
+}
+
+export interface CoachAdvice {
+  stateID: number;
+  /** Best first. */
+  moves: CoachMove[];
+  /** Your next moves this turn after the best one, as the coach expects them. */
+  plan: string[];
+  iterations: number;
+  ms: number;
+}
+
+/** Identity of a command (move + args with sorted keys), shared by coach advice and UiActions. */
+export function coachKey(move: string, args?: Record<string, unknown>): string {
+  const sorted = (v: unknown): string => {
+    if (Array.isArray(v)) return `[${v.map(sorted).join(",")}]`;
+    if (v && typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      return `{${Object.keys(o)
+        .sort()
+        .map((k) => `${JSON.stringify(k)}:${sorted(o[k])}`)
+        .join(",")}}`;
+    }
+    return JSON.stringify(v);
+  };
+  return args ? `${move}${sorted(args)}` : move;
 }
