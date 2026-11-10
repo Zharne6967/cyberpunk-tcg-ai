@@ -9,6 +9,7 @@ import type { AnalysisReport } from "@cpai/core/protocol";
 import { buildReport, planGauntlet } from "./analysis.ts";
 import { doctorOpponents, proposeSwaps } from "./doctor.ts";
 import { labBreed, labSeed } from "./lab.ts";
+import { bestLegends, metaAdvice, metaBuild, metaData } from "./meta-stats.ts";
 import { playMatch, type MatchOutcome } from "./match.ts";
 
 export type AnalysisWorkerIn =
@@ -17,7 +18,10 @@ export type AnalysisWorkerIn =
   | { type: "propose"; job?: number; deck: Deck; opponents: Deck[]; outcomes: (MatchOutcome | null)[]; cuts: number; adds: number; keep?: string[] }
   | { type: "opponents"; job?: number; target: Deck; pool: Deck[] }
   | { type: "labSeed"; job?: number; pool: Deck[]; count: number; seed: string; keep?: string[]; values?: Record<string, number> }
-  | { type: "labBreed"; job?: number; parents: Deck[]; pool: Deck[]; count: number; seed: string; keep?: string[]; values?: Record<string, number> };
+  | { type: "labBreed"; job?: number; parents: Deck[]; pool: Deck[]; count: number; seed: string; keep?: string[]; values?: Record<string, number> }
+  | { type: "metaList"; job?: number }
+  | { type: "metaBuild"; job?: number; keys?: string[]; legends?: string[] }
+  | { type: "metaAdvice"; job?: number; deck: Deck; keep?: string[] };
 
 export type AnalysisWorkerOut =
   | { type: "plan"; job?: number; total: number }
@@ -27,6 +31,7 @@ export type AnalysisWorkerOut =
   | { type: "proposed"; job?: number; proposal: ReturnType<typeof proposeSwaps> }
   | { type: "opponents"; job?: number; opponents: Deck[] }
   | { type: "decks"; job?: number; decks: Deck[] }
+  | { type: "meta"; job?: number; result: unknown }
   | { type: "error"; job?: number; message: string };
 
 const ctx = self as unknown as { onmessage: ((e: { data: AnalysisWorkerIn }) => void) | null; postMessage(m: AnalysisWorkerOut): void };
@@ -36,6 +41,21 @@ ctx.onmessage = ({ data }) => {
   try {
     if (data.type === "propose") {
       ctx.postMessage({ type: "proposed", job, proposal: proposeSwaps(data.deck, data.opponents, data.outcomes, data.cuts, data.adds, data.keep ?? []) });
+      return;
+    }
+    if (data.type === "metaList") {
+      const m = metaData();
+      ctx.postMessage({ type: "meta", job, result: { source: m.source, date: m.date, archetypes: m.archetypes.map(({ key, name, games, share, winRate }) => ({ key, name, games, share, winRate })) } });
+      return;
+    }
+    if (data.type === "metaBuild") {
+      const all = metaData().archetypes.filter((a) => !data.keys || data.keys.includes(a.key));
+      const builds = all.map((a) => metaBuild(a, data.legends?.length ? (bestLegends(a, data.legends) ?? undefined) : undefined)).filter((b) => !!b);
+      ctx.postMessage({ type: "meta", job, result: builds });
+      return;
+    }
+    if (data.type === "metaAdvice") {
+      ctx.postMessage({ type: "meta", job, result: metaAdvice(data.deck, data.keep ?? []) });
       return;
     }
     if (data.type === "labSeed") {

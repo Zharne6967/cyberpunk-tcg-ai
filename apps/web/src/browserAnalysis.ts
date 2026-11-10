@@ -282,3 +282,60 @@ export async function checkInBrowser(
     stop();
   }
 }
+
+// ---- The ladder: ChoomBattler statistics per colour archetype (packages/ai/src/meta-stats.ts).
+
+export interface LegendStat {
+  slug: string;
+  name: string;
+  popularity: number;
+  winRate: number;
+  games: number;
+  lift: number;
+}
+export interface CardStat extends LegendStat {
+  type: "unit" | "gear" | "program";
+  copies: number;
+}
+export interface ArchetypeStats {
+  key: string;
+  name: string;
+  games: number;
+  share: number;
+  winRate: number;
+  legends: LegendStat[];
+  cards: CardStat[];
+}
+export type ArchetypeSummary = Pick<ArchetypeStats, "key" | "name" | "games" | "share" | "winRate">;
+export interface MetaBuild {
+  archetype: ArchetypeStats;
+  deck: DeckData;
+  legends: LegendStat[];
+  cards: { slug: string; copies: number; stat: CardStat | null }[];
+}
+export interface MetaAdvice {
+  archetype: ArchetypeStats | null;
+  cards: { slug: string; copies: number; stat: CardStat | null }[];
+  swaps: { out: string; in: string; copies: number; outStat: CardStat | null; inStat: CardStat }[];
+  legendSwaps: { out: string; in: string; outStat: LegendStat | null; inStat: LegendStat }[];
+  improved: DeckData;
+}
+
+/** One answer from a short-lived worker (the ladder data lives there with the card catalog). */
+function askOnce<T>(msg: Record<string, unknown>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const w = new Worker(new URL("../../../packages/ai/src/browser-worker.ts", import.meta.url), { type: "module" });
+    w.onmessage = ({ data }: MessageEvent<{ type: string; result?: unknown; message?: string }>) => {
+      if (data.type === "meta") resolve(data.result as T);
+      else if (data.type === "error") reject(new Error(data.message));
+      else return;
+      w.terminate();
+    };
+    w.onerror = (e) => (reject(new Error(e.message || "The worker failed")), w.terminate());
+    w.postMessage({ ...msg, job: 1 });
+  });
+}
+
+export const metaList = () => askOnce<{ source: string; date: string; archetypes: ArchetypeSummary[] }>({ type: "metaList" });
+export const metaBuilds = (keys?: string[], legends?: string[]) => askOnce<MetaBuild[]>({ type: "metaBuild", keys, legends });
+export const metaAdviceFor = (deck: DeckData, keep: string[] = []) => askOnce<MetaAdvice>({ type: "metaAdvice", deck, keep });

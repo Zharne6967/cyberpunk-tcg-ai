@@ -602,3 +602,11 @@ a { color: var(--cyan); }
 .doc-verdict { margin: 4px 0; font-size: 14px; }
 .doc-actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
 .doc-kept { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.doc-swap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.doc-swap > div { flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; }
+.lab-ladder { gap: 6px 18px; }
+.lab-stat { white-space: nowrap; }
+.lab-stat .up { color: #5ad18a; }
+.lab-stat .down { color: #ff6b6b; }
+.lab-index { margin-top: 6px; }
+.lab-index td { padding: 3px 8px 3px 0; vertical-align: middle; }

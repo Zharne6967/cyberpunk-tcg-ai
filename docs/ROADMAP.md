@@ -12,7 +12,7 @@ Każdy etap to osobna sesja pracy, zakończona działającą wersją i paczką Z
 | 5b | Gra ze znajomym + telefon | pokoje z linkiem zaproszenia (człowiek–człowiek, każdy widzi tylko swoje karty), klucz dostępu dla urządzeń z zewnątrz, Cloudflare quick tunnel z poziomu poczekalni, przeciąganie palcem, podgląd karty po najechaniu / przytrzymaniu, układ na telefon | 🔶 wersja 1 (patrz niżej) |
 | 6 | Uczenie się | zapis każdej partii, nocny self-play, strojenie oceny pozycji, „bramka” (nowa wersja musi pokonać starą), raport czego się nauczył, model Twojego stylu gry | 🔶 self-play + bramka działają (patrz niżej) |
 | 7 | Talie z sieci | importery (tcgcontender, ripperdeck, choombattler, exburst, tekst), snapshot mety, gauntlet, analiza talii w UI (krzywa, Eddies, aggro, tempo kluczowych kart) | 🔶 pula meta + dodawanie list; automat zablokowany regulaminami (niżej) |
-| 8 | AI deck builder | generowanie talii + weryfikacja tysiącami symulacji vs meta, wyjaśnienia wyborów | 🔶 Deck Lab wersja 1 |
+| 8 | AI deck builder | generowanie talii + weryfikacja tysiącami symulacji vs meta, wyjaśnienia wyborów | 🔶 Deck Lab wersja 2 (dane ladderu + sprawdzenie botami Strong) |
 | 9 | Asystent zasad i trener | czat (Claude API lub Ollama), RAG po zasadach/FAQ/kartach, analiza partii po meczu, podpowiedzi w trakcie gry (tylko w trybie nauki) | |
 | 10 | Szlify | tryb offline, aktualizacja kart z nowych dodatków, instrukcja | |
 
@@ -56,6 +56,24 @@ na Jednostkę, resztę na resztę; Deck Doctor nie proponuje zmian oddalających
 tnie też **rdzenia talii** (`coreCards`: karty grane w co najmniej połowie talii puli o tych samych kolorach) ani
 kart, które gracz każe zostawić („Keep …” przy zmianie = nowy przebieg z tą kartą chronioną); raport mówi zdaniem,
 co zmienić i o ile to pomogło, a sprawdzenie jest botami Strong (`ismcts-sim`).
+
+**Deck Lab i Deck Doctor z danych ladderu (2026-11-10, uwaga gracza: „dalej daje bezsensowne zmiany”, „gdzie
+jest bot, który sam tworzy dobre talie”).** Symulacje botami Easy nie nadają się do wyboru kart (bot Easy źle gra
+karty wymagające umiejętności, a kilkaset partii to za mało na różnice 2–3 pkt). Teraz o kartach decydują **prawdziwe
+partie**: `data/meta/choombattler-archetypes.json` — 12 archetypów kolorów z ChoomBattlera (ranked, Core BO1, 30 dni,
+odczyt stron jak użytkownik 2026-11-10): udział, win rate, Legendy i karty z popularnością, średnią liczbą kopii,
+win rate i *lift* (o ile pkt wygrywają listy z kartą). `packages/ai/src/meta-stats.ts`:
+`trustedLift` (lift ściągnięty do zera przy małej liczbie partii: × games/(games+300)), `cardValue` (popularność +
+lift/3), `bestLegends` (trio o kolorach archetypu, najwyższy lift), `metaBuild` (karty wg wartości w zwykłej liczbie
+kopii, kształt META_SHAPE 13–17 Jednostek, ≤11 kart 5+; karty z liftem < −1 tylko gdy nic innego), `metaAdvice`
+(cięcia: karta spoza listy archetypu, lift ≤ −1 albo popularność < 30%; w zamian najlepsza brakująca karta tej
+samej klasy — Jednostka za Jednostkę — z liftem > −0.5; Legendy tylko przy +3 pkt i ≥300 partiach; „Keep”).
+Sprawdzenie: listy meta z ChoomBattlera dostają „no changes”. UI: **Deck Lab** = najlepsza talia każdego
+archetypu z liczbami przy każdej karcie i Legendzie, opcja „Build around” (Legenda), *Check with Strong bots*
+(mecze z pulą meta + szacunek ladderu = wynik + 7 pkt); **Deck Doctor** w Deck Analysis = podmiany z liczbami,
+tabela „Your cards on the ladder”, *Save as a new deck*, sprawdzenie botami Strong. Ewolucyjny Lab na botach
+zostaje w CLI (`pnpm lab`); `pnpm ladder` drukuje talie Laba i porady Doctora dla `data/decks`. Odświeżenie danych:
+ręcznie (strony archetypów `/meta/<klucz>?queue=core-bo1&window=30d`), plik JSON jak wyżej.
 
 **Pula meta** = `data/decks/meta-*`, `rogue-ai-*` + talie dodane przez gracza („Meta pool” → *Add to the meta pool*,
 w przeglądarce, `apps/web/src/metaPool.ts`; używa jej też Deck Doctor). Dodane 2026-11-09 z ChoomBattler

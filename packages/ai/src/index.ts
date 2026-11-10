@@ -12,3 +12,4 @@ export * from "./coach.ts";
 export * from "./doctor.ts";
 export * from "./lab.ts";
 export * from "./lab-loop.ts";
+export * from "./meta-stats.ts";

@@ -1,22 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DeckData, DeckSummary } from "@cpai/core/protocol";
 import { api, loadCardDb, type CardDb } from "../api.ts";
-import { checkInBrowser, labInBrowser, type Checked, type LabOptions, type LabReport, type Matchup } from "../browserAnalysis.ts";
+import { checkInBrowser, metaBuilds, metaList, type ArchetypeSummary, type Checked, type MetaBuild, type Matchup } from "../browserAnalysis.ts";
 import { addMetaDeck, addedMetaDecks, metaPool, removeMetaDeck } from "../metaPool.ts";
-import { Rate, Thumb } from "./Analysis.tsx";
+import { LADDER, Rate, Thumb } from "./Analysis.tsx";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
-const SIZES: Record<"Quick" | "Normal" | "Deep", Partial<LabOptions>> = {
-  Quick: { generations: 3, population: 16, survivors: 6, screen: 32, final: 120 },
-  Normal: {},
-  Deep: { generations: 12, population: 32, survivors: 10, screen: 64, final: 480 },
-};
+const lift = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(1)} pts`;
+const liftClass = (x: number) => (x >= 1 ? "up" : x <= -1 ? "down" : "muted");
 /** Games per opponent for the check with the Strong simulation bot. */
 const CHECK_PER = 4;
 const TYPE_ORDER = ["unit", "gear", "program"] as const;
 const TYPE_LABEL: Record<string, string> = { unit: "Units", gear: "Gear", program: "Programs" };
-
-type State = { status: "running"; text: string; done: number; total: number } | { status: "done"; report: LabReport<DeckData> };
+const STRONG = LADDER["ismcts-sim"]!;
 
 /** Units, sellable cards (every Gear and Program, almost no Unit) and 5+ cost cards of a deck. */
 function DeckShapeLine({ db, deck }: { db: CardDb; deck: DeckData }) {
@@ -36,26 +32,35 @@ function DeckShapeLine({ db, deck }: { db: CardDb; deck: DeckData }) {
   );
 }
 
-function DeckList({ db, deck }: { db: CardDb; deck: DeckData }) {
+/** The Main Deck by card type, each card with why it is there: its numbers on the ladder. */
+function LadderList({ db, build }: { db: CardDb; build: MetaBuild }) {
   const groups = TYPE_ORDER.map((t) => ({
     t,
-    cards: Object.entries(deck.main)
-      .filter(([s]) => db.bySlug.get(s)?.type === t)
-      .sort(([a], [b]) => (db.bySlug.get(a)?.cost ?? 0) - (db.bySlug.get(b)?.cost ?? 0)),
+    cards: build.cards.filter((c) => db.bySlug.get(c.slug)?.type === t).sort((a, b) => (db.bySlug.get(a.slug)?.cost ?? 0) - (db.bySlug.get(b.slug)?.cost ?? 0)),
   })).filter((g) => g.cards.length);
   return (
     <div className="lab-list">
       {groups.map((g) => (
         <div key={g.t}>
           <div className="small muted">
-            {TYPE_LABEL[g.t]} ({g.cards.reduce((s, [, n]) => s + n, 0)})
+            {TYPE_LABEL[g.t]} ({g.cards.reduce((s, c) => s + c.copies, 0)})
           </div>
-          <div className="lab-cards">
-            {g.cards.map(([s, n]) => (
-              <span key={s} className="lab-card">
-                <Thumb db={db} slug={s} />
+          <div className="lab-cards lab-ladder">
+            {g.cards.map((c) => (
+              <span key={c.slug} className="lab-card">
+                <Thumb db={db} slug={c.slug} />
                 <span className="small">
-                  {n} × {db.bySlug.get(s)?.displayName ?? s}
+                  {c.copies} × {db.bySlug.get(c.slug)?.displayName ?? c.slug}
+                  <span className="lab-stat">
+                    {c.stat ? (
+                      <>
+                        {" "}
+                        in {c.stat.popularity}% · <span className={liftClass(c.stat.lift)}>{lift(c.stat.lift)}</span>
+                      </>
+                    ) : (
+                      <span className="muted"> to fill the deck</span>
+                    )}
+                  </span>
                 </span>
               </span>
             ))}
@@ -92,99 +97,126 @@ function Matchups({ db, list }: { db: CardDb; list: Matchup[] }) {
   );
 }
 
-function verdict(list: Matchup[]) {
-  const beaten = list.filter((m) => m.ci[0] > 0.5).length;
-  const ahead = list.filter((m) => m.rate > 0.5).length;
-  return { beaten, ahead, all: list.length, worst: [...list].sort((a, b) => a.rate - b.rate)[0] };
-}
+type Check = { status: "running"; done: number; total: number } | { status: "done"; result: Checked };
 
-function LabDeck({ db, entry, rank, check }: { db: CardDb; entry: LabReport<DeckData>["finalists"][number]; rank: number; check?: Checked }) {
+/** One deck built from the ladder: Legends, cards with their numbers, and the check with Strong bots. */
+function LadderDeck({
+  db,
+  build,
+  rank,
+  check,
+  busy,
+  onCheck,
+}: {
+  db: CardDb;
+  build: MetaBuild;
+  rank: number;
+  check?: Check;
+  busy: boolean;
+  onCheck: () => void;
+}) {
   const [saved, setSaved] = useState<DeckSummary>();
   const [error, setError] = useState<string>();
-  const v = verdict(entry.matchups);
-  const strong = entry.matchups.filter((m) => m.rate >= 0.55).sort((a, b) => b.rate - a.rate);
-  const weak = entry.matchups.filter((m) => m.rate < 0.45).sort((a, b) => a.rate - b.rate);
+  const a = build.archetype;
+  const name = (slug: string) => db.bySlug.get(slug)?.displayName ?? slug;
+  const result = check?.status === "done" ? check.result : undefined;
+  const strong = result ? result.matchups.filter((m) => m.rate >= 0.55).sort((x, y) => y.rate - x.rate) : [];
+  const weak = result ? result.matchups.filter((m) => m.rate < 0.45).sort((x, y) => x.rate - y.rate) : [];
   const save = async () => {
     setError(undefined);
     try {
-      setSaved(await api.saveDeck({ ...entry.deck, id: `user-${Date.now().toString(36)}` }));
+      setSaved(await api.saveDeck({ ...build.deck, id: `user-${Date.now().toString(36)}` }));
     } catch (e) {
       setError(String((e as Error).message ?? e));
     }
   };
   return (
-    <section className="panel lab-deck">
+    <section className="panel lab-deck" id={`lab-${a.key}`}>
       <div className="an-head">
         <div className="an-cards">
-          {entry.deck.legends.map((s) => (
+          {build.deck.legends.map((s) => (
             <Thumb key={s} db={db} slug={s} size="sm" />
           ))}
         </div>
         <div>
           <h2>
-            #{rank} {entry.deck.name}
+            #{rank} {a.name}: {build.deck.name}
           </h2>
-          <div className="an-overall">
-            <Rate r={entry} />
-            <span className="muted small">
-              {entry.games} games against {entry.matchups.length} decks · Easy bots on both sides
-            </span>
+          <div className="lab-verdict">
+            Ladder: <b>{a.winRate}%</b> win rate over {a.games} games · {a.share}% of the field
           </div>
-          {check && (
-            <div className="an-overall">
-              <span className="small">Strong bots</span>
-              <Rate r={check} />
-              <span className="muted small">{check.games} games</span>
-            </div>
-          )}
-          <div className={`lab-verdict ${v.beaten === v.all ? "up" : ""}`}>
-            {v.beaten === v.all
-              ? "Beats every deck in the pool"
-              : `Wins more than half the games against ${v.ahead} of ${v.all} decks (clearly against ${v.beaten})`}
-            {v.worst && ` · weakest matchup: ${pct(v.worst.rate)} vs ${v.worst.name}`}
+          <div className="small">
+            {build.deck.legends.map((s, i) => {
+              const l = build.legends.find((x) => x.slug === s);
+              return (
+                <span key={s}>
+                  {i ? " · " : ""}
+                  {name(s)}
+                  {l ? (
+                    <>
+                      {" "}
+                      (in {l.popularity}%, <span className={liftClass(l.lift)}>{lift(l.lift)}</span>)
+                    </>
+                  ) : null}
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>
       {error && <div className="banner error">{error}</div>}
-      <div className="an-grid">
-        <div>
-          <h3>Strong against</h3>
-          {strong.length ? (
-            <ul className="an-findings">
-              {strong.map((m) => (
-                <li key={m.opponent}>
-                  <span>{m.name}</span>
-                  <b className="up">{pct(m.rate)}</b>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted small">No matchup at 55% or more.</p>
-          )}
-          <h3>Loses to</h3>
-          {weak.length ? (
-            <ul className="an-findings">
-              {weak.map((m) => (
-                <li key={m.opponent}>
-                  <span>{m.name}</span>
-                  <b className="down">{pct(m.rate)}</b>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted small">No matchup below 45%.</p>
-          )}
-        </div>
-        <div>
-          <h3>Main Deck</h3>
-          <DeckShapeLine db={db} deck={entry.deck} />
-          <DeckList db={db} deck={entry.deck} />
-        </div>
+      <div>
+        <h3>Main Deck</h3>
+        <DeckShapeLine db={db} deck={build.deck} />
+        <LadderList db={db} build={build} />
       </div>
-      <details className="an-doc-round">
-        <summary>All matchups</summary>
-        <Matchups db={db} list={entry.matchups} />
-      </details>
+      {result && (
+        <>
+          <div className="an-overall">
+            <span className="small">Strong bots against the meta decks</span>
+            <Rate r={result} />
+            <span className="muted small">
+              ≈ {pct(Math.min(1, result.rate + STRONG.offset / 100))} on the ladder (±{STRONG.miss} pts)
+            </span>
+          </div>
+          <div className="an-grid">
+            <div>
+              <h3>Strong against</h3>
+              {strong.length ? (
+                <ul className="an-findings">
+                  {strong.map((m) => (
+                    <li key={m.opponent}>
+                      <span>{m.name}</span>
+                      <b className="up">{pct(m.rate)}</b>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted small">No matchup at 55% or more.</p>
+              )}
+            </div>
+            <div>
+              <h3>Loses to</h3>
+              {weak.length ? (
+                <ul className="an-findings">
+                  {weak.map((m) => (
+                    <li key={m.opponent}>
+                      <span>{m.name}</span>
+                      <b className="down">{pct(m.rate)}</b>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted small">No matchup below 45%.</p>
+              )}
+            </div>
+          </div>
+          <details className="an-doc-round">
+            <summary>All matchups</summary>
+            <Matchups db={db} list={result.matchups} />
+          </details>
+        </>
+      )}
       <div className="an-counter-actions">
         {saved ? (
           <>
@@ -198,6 +230,20 @@ function LabDeck({ db, entry, rank, check }: { db: CardDb; entry: LabReport<Deck
         ) : (
           <button className="btn small primary" onClick={save}>
             Save as a new deck
+          </button>
+        )}
+        {check?.status === "running" ? (
+          <span className="an-progress">
+            <span className="an-bar wide">
+              <span style={{ width: check.total ? pct(check.done / check.total) : "0%" }} />
+            </span>
+            <span className="small muted">
+              Strong bots: {check.done}/{check.total || "…"} games
+            </span>
+          </span>
+        ) : (
+          <button className="btn small" disabled={busy} onClick={onCheck}>
+            {result ? "Check again" : "Check with Strong bots"}
           </button>
         )}
       </div>
@@ -263,69 +309,75 @@ export function Lab() {
   const [db, setDb] = useState<CardDb>();
   const [builtIn, setBuiltIn] = useState<DeckData[]>([]);
   const [poolVersion, setPoolVersion] = useState(0);
-  const [against, setAgainst] = useState<"meta" | "all">("meta");
-  const [objective, setObjective] = useState<LabOptions["objective"]>("average");
-  const [size, setSize] = useState<keyof typeof SIZES>("Normal");
-  const [keep, setKeep] = useState("");
-  const [state, setState] = useState<State>();
+  const [meta, setMeta] = useState<{ source: string; date: string; archetypes: ArchetypeSummary[] }>();
+  const [builds, setBuilds] = useState<MetaBuild[]>();
+  const [legend, setLegend] = useState("");
+  const [order, setOrder] = useState<"winRate" | "games">("winRate");
   const [error, setError] = useState<string>();
-  const [check, setCheck] = useState<{ done: number; total: number } | Checked[]>();
+  const [checks, setChecks] = useState<Record<string, Check>>({});
   const abort = useRef<AbortController | null>(null);
-  const checkAbort = useRef<AbortController | null>(null);
-  useEffect(() => () => (abort.current?.abort(), checkAbort.current?.abort()), []);
+  useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => {
     loadCardDb().then(setDb).catch((e) => setError(String(e.message ?? e)));
     api
       .analysisPool()
       .then(setBuiltIn)
       .catch((e) => setError(String(e.message ?? e)));
+    metaList()
+      .then(setMeta)
+      .catch((e) => setError(String(e.message ?? e)));
   }, []);
+  useEffect(() => {
+    setBuilds(undefined);
+    let live = true;
+    metaBuilds(undefined, legend ? [legend] : undefined)
+      .then((b) => live && setBuilds(b))
+      .catch((e) => live && setError(String(e.message ?? e)));
+    return () => {
+      live = false;
+    };
+  }, [legend]);
   const pool = useMemo(() => {
     void poolVersion;
-    const meta = metaPool(builtIn);
-    return against === "meta" && meta.length >= 3 ? meta : [...builtIn, ...addedMetaDecks()];
-  }, [builtIn, against, poolVersion]);
+    const m = metaPool(builtIn);
+    return m.length >= 3 ? m : [...builtIn, ...addedMetaDecks()];
+  }, [builtIn, poolVersion]);
   const legends = useMemo(() => (db ? [...db.bySlug.values()].filter((c) => c.type === "legend").sort((a, b) => a.displayName.localeCompare(b.displayName)) : []), [db]);
-  const running = state?.status === "running";
+  const sorted = useMemo(
+    () => [...(builds ?? [])].sort((x, y) => (order === "winRate" ? y.archetype.winRate - x.archetype.winRate : y.archetype.games - x.archetype.games)),
+    [builds, order],
+  );
+  const running = Object.values(checks).some((c) => c.status === "running");
 
-  const start = async () => {
-    setError(undefined);
-    setCheck(undefined);
+  const runCheck = async (build: MetaBuild) => {
     abort.current?.abort();
     const ctl = (abort.current = new AbortController());
-    setState({ status: "running", text: "Starting", done: 0, total: 1 });
+    const id = build.deck.id;
+    setChecks((c) => ({ ...c, [id]: { status: "running", done: 0, total: 0 } }));
     try {
-      const report = await labInBrowser(pool, { ...SIZES[size], objective, keep: keep ? [keep] : [] }, (text, done, total) => !ctl.signal.aborted && setState({ status: "running", text, done, total }), ctl.signal);
-      setState({ status: "done", report });
+      const [result] = await checkInBrowser(
+        [build.deck],
+        pool,
+        CHECK_PER,
+        "ismcts-sim",
+        (done, total) => !ctl.signal.aborted && setChecks((c) => ({ ...c, [id]: { status: "running", done, total } })),
+        ctl.signal,
+      );
+      setChecks((c) => ({ ...c, [id]: { status: "done", result: result! } }));
     } catch (e) {
-      if (ctl.signal.aborted) return;
-      setState(undefined);
-      setError(String((e as Error).message ?? e));
+      setChecks((c) => {
+        const { [id]: _, ...rest } = c;
+        return rest;
+      });
+      if (!ctl.signal.aborted) setError(String((e as Error).message ?? e));
     }
   };
   const stop = () => {
     abort.current?.abort();
-    setState(undefined);
-  };
-  const runCheck = async (report: LabReport<DeckData>) => {
-    checkAbort.current?.abort();
-    const ctl = (checkAbort.current = new AbortController());
-    const decks = [...report.finalists.map((f) => f.deck), ...(report.bestPool ? [report.bestPool.deck] : [])];
-    setCheck({ done: 0, total: 0 });
-    try {
-      setCheck(await checkInBrowser(decks, report.opponents, CHECK_PER, "ismcts-sim", (done, total) => !ctl.signal.aborted && setCheck({ done, total }), ctl.signal));
-    } catch (e) {
-      if (ctl.signal.aborted) return;
-      setCheck(undefined);
-      setError(String((e as Error).message ?? e));
-    }
+    setChecks((c) => Object.fromEntries(Object.entries(c).filter(([, v]) => v.status === "done")));
   };
 
   if (!db) return <div className="center-msg">{error ?? "Loading cards…"}</div>;
-  const report = state?.status === "done" ? state.report : undefined;
-  const checked = Array.isArray(check) ? check : undefined;
-  const progress = check && !Array.isArray(check) ? check : undefined;
-  const checkOf = (id: string) => checked?.find((c) => c.deckId === id);
   return (
     <div className="analysis">
       <header className="lobby-top">
@@ -346,33 +398,18 @@ export function Lab() {
       </header>
       {error && <div className="banner error">{error}</div>}
       <section className="panel an-input">
+        <p className="small">
+          The best deck for every colour archetype, built from real games: the Legends and cards that the winning lists play, each at its usual number of copies, with
+          13–17 Units like the meta lists.
+          {meta && <span className="muted"> Data: ChoomBattler ranked games, Core BO1, last 30 days (read on {meta.date}).</span>}
+        </p>
+        <p className="muted small">
+          In: the share of the archetype's lists that play the card. The points: how much more (or less) those lists win. "Check with Strong bots" plays the deck against
+          the meta decks to show what it beats and what it loses to.
+        </p>
         <div className="an-options">
-          <span className="small muted">Opponents</span>
-          <button className={`chip ${against === "meta" ? "sel" : ""}`} disabled={running} onClick={() => setAgainst("meta")}>
-            Meta decks ({metaPool(builtIn).length})
-          </button>
-          <button className={`chip ${against === "all" ? "sel" : ""}`} disabled={running} onClick={() => setAgainst("all")}>
-            All decks ({builtIn.length + addedMetaDecks().length})
-          </button>
-        </div>
-        <div className="an-options">
-          <span className="small muted">Goal</span>
-          <button className={`chip ${objective === "average" ? "sel" : ""}`} disabled={running} onClick={() => setObjective("average")}>
-            Best average
-          </button>
-          <button className={`chip ${objective === "worst" ? "sel" : ""}`} disabled={running} onClick={() => setObjective("worst")}>
-            Beat every deck
-          </button>
-          <span className="an-sep" />
-          {(Object.keys(SIZES) as (keyof typeof SIZES)[]).map((s) => (
-            <button key={s} className={`chip ${size === s ? "sel" : ""}`} disabled={running} onClick={() => setSize(s)}>
-              {s}
-            </button>
-          ))}
-        </div>
-        <div className="an-options">
-          <span className="small muted">Legend</span>
-          <select className="lab-select" value={keep} disabled={running} onChange={(e) => setKeep(e.target.value)}>
+          <span className="small muted">Build around</span>
+          <select className="lab-select" value={legend} onChange={(e) => setLegend(e.target.value)}>
             <option value="">Any Legends</option>
             {legends.map((c) => (
               <option key={c.slug} value={c.slug}>
@@ -380,80 +417,62 @@ export function Lab() {
               </option>
             ))}
           </select>
-          {running ? (
+          <span className="an-sep" />
+          <span className="small muted">Order</span>
+          <button className={`chip ${order === "winRate" ? "sel" : ""}`} onClick={() => setOrder("winRate")}>
+            Win rate
+          </button>
+          <button className={`chip ${order === "games" ? "sel" : ""}`} onClick={() => setOrder("games")}>
+            Most played
+          </button>
+          {running && (
             <button className="btn" onClick={stop}>
               Stop
             </button>
-          ) : (
-            <button className="btn primary" disabled={pool.length < 2} onClick={start}>
-              Create decks
-            </button>
           )}
         </div>
-        {state?.status === "running" && (
-          <div className="an-progress">
-            <span className="an-bar wide">
-              <span style={{ width: state.total ? pct(Math.min(1, state.done / state.total)) : "0%" }} />
-            </span>
-            <span className="small muted">
-              {state.text} · {state.done}/{state.total} games
-            </span>
-          </div>
+        {sorted.length > 0 && (
+          <table className="an-table lab-index">
+            <tbody>
+              {sorted.map((b, i) => (
+                <tr key={b.deck.id}>
+                  <td className="muted">#{i + 1}</td>
+                  <td>
+                    <span className="an-cards">
+                      {b.deck.legends.map((s) => (
+                        <Thumb key={s} db={db} slug={s} />
+                      ))}
+                    </span>
+                  </td>
+                  <td>
+                    <a href={`#/lab`} onClick={(e) => (e.preventDefault(), document.getElementById(`lab-${b.archetype.key}`)?.scrollIntoView({ behavior: "smooth" }))}>
+                      {b.archetype.name}
+                    </a>
+                  </td>
+                  <td>
+                    <b>{b.archetype.winRate}%</b>
+                  </td>
+                  <td className="muted small">
+                    {b.archetype.games} games · {b.archetype.share}%
+                  </td>
+                  <td className="small">
+                    {(() => {
+                      const c = checks[b.deck.id];
+                      return c?.status === "done" ? `Strong bots ${pct(c.result.rate)}` : "";
+                    })()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
+        {builds && !sorted.length && <p className="muted small">No archetype on the ladder plays this Legend's colour with a legal trio.</p>}
+        {!builds && !error && <p className="muted small">Building decks…</p>}
       </section>
       <PoolEditor db={db} builtIn={builtIn} onChange={() => setPoolVersion((v) => v + 1)} />
-      {report && (
-        <>
-          <section className="panel an-doctor">
-            <div className="an-overall">
-              <span>
-                {report.finalists.length} new decks · {report.history.at(-1)?.decks ?? 0} decks tested · {report.games} games · {(report.ms / 1000).toFixed(0)} s
-              </span>
-            </div>
-            <p className="muted small">
-              Easy bots on both sides. A deck can score high by using what Easy bots play badly: check the best deck with Strong bots before you rely on it.
-            </p>
-            <div className="lab-history">
-              {report.history.map((h) => (
-                <span key={h.generation} className="small muted">
-                  Generation {h.generation}: best {pct(h.best)}
-                </span>
-              ))}
-            </div>
-            {report.bestPool && (
-              <div className="an-overall">
-                <span className="small">Best pool deck: {report.bestPool.deck.name}</span>
-                <Rate r={report.bestPool} />
-                {checkOf(report.bestPool.deck.id) && (
-                  <>
-                    <span className="small">Strong bots</span>
-                    <Rate r={checkOf(report.bestPool.deck.id)!} />
-                  </>
-                )}
-              </div>
-            )}
-            <div className="an-counter-actions">
-              {!progress ? (
-                <button className="btn small" onClick={() => runCheck(report)}>
-                  Check with Strong bots
-                </button>
-              ) : (
-                <span className="an-progress">
-                  <span className="an-bar wide">
-                    <span style={{ width: progress.total ? pct(progress.done / progress.total) : "0%" }} />
-                  </span>
-                  <span className="small muted">
-                    Strong bots: {progress.done}/{progress.total || "…"} games
-                  </span>
-                </span>
-              )}
-            </div>
-          </section>
-          {report.finalists.map((e, i) => (
-            <LabDeck key={e.deck.id} db={db} entry={e} rank={i + 1} check={checkOf(e.deck.id)} />
-          ))}
-        </>
-      )}
+      {sorted.map((b, i) => (
+        <LadderDeck key={b.deck.id} db={db} build={b} rank={i + 1} check={checks[b.deck.id]} busy={running} onCheck={() => void runCheck(b)} />
+      ))}
     </div>
   );
 }

@@ -24,7 +24,8 @@
     "analyze": "tsx tools/sim/src/analyze.ts",
     "doctor": "tsx tools/sim/src/doctor.ts",
     "selfplay": "tsx tools/sim/src/selfplay.ts",
-    "lab": "tsx tools/sim/src/lab.ts"
+    "lab": "tsx tools/sim/src/lab.ts",
+    "ladder": "tsx tools/sim/src/ladder.ts"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { AnalysisFinding, AnalysisJob, AnalysisReport, DeckData, DeckProfile, DeckSummary, WinRate } from "@cpai/core/protocol";
 import { api, loadCardDb, type CardDb } from "../api.ts";
-import { analyzeInBrowser, confirmInBrowser, doctorInBrowser } from "../browserAnalysis.ts";
-import type { Confirmation, DoctorOptions, DoctorReport } from "../browserAnalysis.ts";
+import { analyzeInBrowser, confirmInBrowser, metaAdviceFor, type MetaAdvice } from "../browserAnalysis.ts";
+import type { Confirmation } from "../browserAnalysis.ts";
 import { addedMetaDecks, metaPool } from "../metaPool.ts";
 import { CardFace } from "./CardFace.tsx";
 import { DeckPicker } from "./Lobby.tsx";
@@ -25,7 +25,7 @@ const BOTS: { id: string; label: string }[] = [
  * 7 meta decks (docs/BENCHMARK.md, 2026-11-10): the ladder also has weaker decks, so its win rates are
  * higher by `offset` points on average; after adding it, the estimate is off by `miss` points on average.
  */
-const LADDER: Record<string, { offset: number; miss: number }> = { greedy: { offset: 9, miss: 10 }, "ismcts-sim": { offset: 7, miss: 4 } };
+export const LADDER: Record<string, { offset: number; miss: number }> = { greedy: { offset: 9, miss: 10 }, "ismcts-sim": { offset: 7, miss: 4 } };
 
 /** The ladder win rate of a list from the meta pool (its source note), if the analysed deck is one. */
 function ladderOf(deck: DeckData, pool: DeckData[]): { rate: number; share: number | null } | null {
@@ -38,13 +38,6 @@ function ladderOf(deck: DeckData, pool: DeckData[]): { rate: number; share: numb
   return { rate: Number(rate[1]) / 100, share: share ? Number(share[1]) / 100 : null };
 }
 const pct = (x: number) => `${Math.round(x * 100)}%`;
-/** Deck Doctor search sizes (games at each racing stage, swaps kept after each, fresh games per finalist). */
-const DEPTHS: Record<"Quick" | "Normal" | "Deep", Partial<DoctorOptions>> = {
-  Quick: { rounds: 1, stages: [48, 96], keep: [4, 2], check: 240, cuts: 3, adds: 4, confirm: 240 },
-  Normal: {},
-  Deep: { rounds: 3, stages: [96, 192, 384], keep: [8, 3, 2], check: 800, cuts: 5, adds: 8, confirm: 800 },
-};
-type DoctorState = { status: "running"; text: string; done: number; total: number } | { status: "done"; report: DoctorReport<DeckData> };
 /** Games per opponent for the check with Strong bots (seconds per game on this device). */
 const VERIFY_PER = 4;
 
@@ -408,7 +401,8 @@ function Swap({ db, out, inn, copies }: { db: CardDb; out: string; inn: string; 
   );
 }
 
-const pts = (x: number) => `${x >= 0 ? "+" : ""}${Math.round(x * 100)} pts`;
+const lift = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(1)} pts`;
+const liftClass = (x: number) => (x >= 1 ? "up" : x <= -1 ? "down" : "muted");
 
 /** "better", "worse" or "within chance" for two win rates on n games each (two standard errors). */
 function difference(before: number, after: number, n: number): "better" | "worse" | "same" {
@@ -418,22 +412,20 @@ function difference(before: number, after: number, n: number): "better" | "worse
   return "same";
 }
 
-function DoctorView({ db, report, protect, onKeep }: { db: CardDb; report: DoctorReport<DeckData>; protect: string[]; onKeep: (slug: string) => void }) {
+/** Deck Doctor from the ladder: what winning lists of this archetype play, card by card. */
+function LadderDoctorView({ db, deck, advice, keep, onKeep }: { db: CardDb; deck: DeckData; advice: MetaAdvice; keep: string[]; onKeep: (slug: string) => void }) {
   const [saved, setSaved] = useState<DeckSummary>();
   const [error, setError] = useState<string>();
   const [check, setCheck] = useState<{ done: number; total: number } | Confirmation>();
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
   const name = (slug: string) => db.bySlug.get(slug)?.displayName ?? slug;
-  const c = report.confirm;
-  const first = report.rounds[0];
-  // Every card tried for a swap, once, with its best measured replacement (most games first, then gain).
-  const tried = first ? first.tried.filter((t, i) => first.tried.findIndex((x) => x.out === t.out) === i) : [];
-  const accepted = report.rounds.map((r) => r.accepted).filter((a): a is NonNullable<typeof a> => !!a);
+  const a = advice.archetype;
+  const changed = advice.swaps.length > 0;
   const save = async () => {
     setError(undefined);
     try {
-      setSaved(await api.saveDeck({ ...report.improved, id: `user-${Date.now().toString(36)}`, name: `${report.original.name} (improved)` }));
+      setSaved(await api.saveDeck({ ...advice.improved, id: `user-${Date.now().toString(36)}`, name: `${deck.name} (ladder)` }));
     } catch (e) {
       setError(String((e as Error).message ?? e));
     }
@@ -444,151 +436,146 @@ function DoctorView({ db, report, protect, onKeep }: { db: CardDb; report: Docto
     const ctl = (abort.current = new AbortController());
     setCheck({ done: 0, total: 0 });
     try {
-      setCheck(await confirmInBrowser(report.original, report.improved, report.opponents, VERIFY_PER, "ismcts-sim", (done, total) => !ctl.signal.aborted && setCheck({ done, total }), ctl.signal));
+      const opponents = metaPool(await api.analysisPool()).filter((d) => d.id !== deck.id);
+      setCheck(await confirmInBrowser(deck, advice.improved, opponents, VERIFY_PER, "ismcts-sim", (done, total) => !ctl.signal.aborted && setCheck({ done, total }), ctl.signal));
     } catch (e) {
       if (ctl.signal.aborted) return;
       setCheck(undefined);
       setError(String((e as Error).message ?? e));
     }
   };
-  const verdict = (r: Confirmation) => difference(r.before, r.after, r.games);
+  if (!a)
+    return (
+      <section className="panel an-doctor">
+        <h2>Deck Doctor: {deck.name}</h2>
+        <p className="doc-verdict">The ladder data has no decks with these Legends' colours yet, so there is nothing to compare this deck with.</p>
+      </section>
+    );
   return (
     <section className="panel an-doctor">
-      <h2>Deck Doctor: {report.original.name}</h2>
-      {report.changes.length ? (
-        <p className="doc-verdict">
-          {report.changes.length === 1 ? "1 change" : `${report.changes.length} changes`} suggested. With {report.changes.length === 1 ? "it" : "them"} the deck won{" "}
-          <b className="up">{pct(c.after)}</b> of {c.games} new games, without {report.changes.length === 1 ? "it" : "them"} <b>{pct(c.before)}</b>.
-        </p>
-      ) : (
-        <p className="doc-verdict">
-          No change clearly improved this deck. It won <b>{pct(c.before)}</b> of {c.games} games against these decks.
-        </p>
-      )}
+      <h2>Deck Doctor: {deck.name}</h2>
+      <p className="doc-verdict">
+        {a.name} on the ChoomBattler ladder: <b>{a.winRate}%</b> win rate over {a.games} games ({a.share}% of the field, last 30 days).{" "}
+        {changed ? `${advice.swaps.length === 1 ? "1 change" : `${advice.swaps.length} changes`} from what the winning lists play:` : "Your deck already plays what the winning lists of this archetype play."}
+      </p>
       <p className="muted small">
-        Easy bots on both sides · {report.opponents.length} decks · {report.games} games · {(report.ms / 1000).toFixed(0)} s. Easy bots misplay some cards (Gear, Programs with
-        conditions), so check a change with Strong bots before you rely on it.
+        Popularity: the share of these lists that play a card. Lift: how many points more (or fewer) the lists with the card win. Numbers from real players' games; a lift over few
+        games is less sure.
       </p>
       {error && <div className="banner error">{error}</div>}
-
-      {report.changes.length > 0 && (
+      {changed && (
+        <ul className="an-findings">
+          {advice.swaps.map((s) => (
+            <li key={s.out} className="doc-swap">
+              <Swap db={db} out={s.out} inn={s.in} copies={s.copies} />
+              <div className="small">
+                <div>
+                  <span className="down">−</span> {name(s.out)}:{" "}
+                  {s.outStat ? (
+                    <>
+                      in {s.outStat.popularity}% of the lists, <span className={liftClass(s.outStat.lift)}>{lift(s.outStat.lift)}</span>
+                    </>
+                  ) : (
+                    "not among the cards these lists play"
+                  )}
+                </div>
+                <div>
+                  <span className="up">+</span> {name(s.in)}: in {s.inStat.popularity}% of the lists ({s.inStat.copies} copies on average),{" "}
+                  <span className={liftClass(s.inStat.lift)}>{lift(s.inStat.lift)}</span> over {s.inStat.games} games
+                </div>
+              </div>
+              <button className="btn small" title={`Never cut ${name(s.out)}`} onClick={() => onKeep(s.out)}>
+                Keep {name(s.out).split(":")[0]}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {advice.legendSwaps.length > 0 && (
         <>
-          <h3>Suggested changes</h3>
+          <h3>Legends</h3>
           <ul className="an-findings">
-            {report.changes.map((x, i) => (
-              <li key={i}>
-                <Swap db={db} out={x.out} inn={x.in} copies={x.copies} />
-                <span className="doc-actions">
-                  {accepted[i]?.checkDelta !== undefined && <span className="small up">{pts(accepted[i]!.checkDelta!)} on new games</span>}
-                  <button className="btn small" title={`Run the Doctor again without ever cutting ${name(x.out)}`} onClick={() => onKeep(x.out)}>
-                    Keep {name(x.out).split(":")[0]}
-                  </button>
+            {advice.legendSwaps.map((l) => (
+              <li key={l.out}>
+                <Swap db={db} out={l.out} inn={l.in} copies={1} />
+                <span className="small">
+                  {name(l.out)} {l.outStat ? <span className={liftClass(l.outStat.lift)}>{lift(l.outStat.lift)}</span> : "(rarely played here)"} → {name(l.in)}{" "}
+                  <span className={liftClass(l.inStat.lift)}>{lift(l.inStat.lift)}</span> in {l.inStat.popularity}% of the lists
                 </span>
               </li>
             ))}
           </ul>
-          <div className="an-counter-actions">
-            {saved ? (
-              <a className="btn small" href={`#/builder/${saved.id}`}>
-                Open in Deck Builder
-              </a>
-            ) : (
-              <button className="btn small primary" onClick={save}>
-                Save as a new deck
-              </button>
-            )}
-            {(!check || "before" in check) && (
-              <button className="btn small" onClick={verify}>
-                Check with Strong bots
-              </button>
-            )}
-            {check && !("before" in check) && (
-              <span className="an-progress">
-                <span className="an-bar wide">
-                  <span style={{ width: check.total ? pct(check.done / check.total) : "0%" }} />
-                </span>
-                <span className="small muted">
-                  Strong bots: {check.done}/{check.total || "…"} games
-                </span>
-              </span>
-            )}
-          </div>
-          {check && "before" in check && (
-            <p className="doc-verdict">
-              Strong bots: <b>{pct(check.before)}</b> → <b className={check.after > check.before ? "up" : check.after < check.before ? "down" : ""}>{pct(check.after)}</b> on {check.games} games each —{" "}
-              {verdict(check) === "better" ? "the changes help." : verdict(check) === "worse" ? "the changes make the deck worse: keep it as it is." : "within chance: no clear gain with Strong bots."}
-            </p>
+        </>
+      )}
+      {changed && (
+        <div className="an-counter-actions">
+          {saved ? (
+            <a className="btn small" href={`#/builder/${saved.id}`}>
+              Open in Deck Builder
+            </a>
+          ) : (
+            <button className="btn small primary" onClick={save}>
+              Save as a new deck
+            </button>
           )}
-        </>
-      )}
-
-      {report.kept.length > 0 && (
-        <>
-          <h3>Kept: the deck's core</h3>
-          <p className="muted small">Never cut: most decks that can play them do (same colours, enough RAM){protect.length ? ", or you chose to keep them" : ""}.</p>
-          <div className="doc-kept">
-            {report.kept.map((k) => (
-              <span key={k.slug} className="an-swap" title={k.share === null ? "Your choice" : `In ${pct(k.share)} of the decks that can play it`}>
-                <Thumb db={db} slug={k.slug} />
-                <span className="small">
-                  {name(k.slug)} <span className="muted">{k.share === null ? "· your choice" : `· ${pct(k.share)}`}</span>
-                </span>
+          {!check || "before" in check ? (
+            <button className="btn small" onClick={verify}>
+              Check with Strong bots
+            </button>
+          ) : (
+            <span className="an-progress">
+              <span className="an-bar wide">
+                <span style={{ width: check.total ? pct(check.done / check.total) : "0%" }} />
               </span>
-            ))}
-          </div>
-        </>
+              <span className="small muted">
+                Strong bots: {check.done}/{check.total || "…"} games
+              </span>
+            </span>
+          )}
+        </div>
       )}
-
-      {tried.length > 0 && (
-        <>
-          <h3>Cards tested for a swap</h3>
-          <p className="muted small">The cards that helped least in these games; each was replaced by other cards in new games.</p>
-          <ul className="an-findings">
-            {tried.map((t) => {
-              const gain = t.checkDelta ?? t.delta;
-              return (
-                <li key={t.out}>
-                  <span className="an-swap">
-                    <Thumb db={db} slug={t.out} />
-                    <span className="small">{name(t.out)}</span>
+      {check && "before" in check && (
+        <p className="doc-verdict">
+          Strong bots against the meta decks: <b>{pct(check.before)}</b> → <b className={check.after > check.before ? "up" : check.after < check.before ? "down" : ""}>{pct(check.after)}</b> on{" "}
+          {check.games} games each —{" "}
+          {difference(check.before, check.after, check.games) === "better"
+            ? "the changes help."
+            : difference(check.before, check.after, check.games) === "worse"
+              ? "worse with the changes here."
+              : "within chance on this many games; the ladder numbers above come from far more games."}
+        </p>
+      )}
+      <h3>Your cards on the ladder</h3>
+      <table className="an-table">
+        <thead>
+          <tr>
+            <th>Card</th>
+            <th>Yours</th>
+            <th>Usual</th>
+            <th>Popularity</th>
+            <th>Lift</th>
+          </tr>
+        </thead>
+        <tbody>
+          {advice.cards.map((c) => (
+            <tr key={c.slug}>
+              <td>
+                <span className="an-swap">
+                  <Thumb db={db} slug={c.slug} />
+                  <span className="small">
+                    {name(c.slug)}
+                    {keep.includes(c.slug) ? <span className="muted"> · kept</span> : null}
                   </span>
-                  <span className="small muted">{gain > 0 ? `best replacement: ${t.copies}× ${name(t.in)} (${pts(gain)}${t.checkGames ? " on new games" : ""})` : "no tested card did better: keep it"}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-      {report.rounds.map((r, i) => (
-        <details key={i} className="an-doc-round">
-          <summary>
-            All swaps tested in round {i + 1} ({r.tried.length}) · the deck won {pct(r.base)}
-            {r.accepted ? ` · kept: ${pts(r.accepted.checkDelta ?? r.accepted.delta)} on new games` : " · no clear gain"}
-          </summary>
-          <table className="an-table">
-            <thead>
-              <tr>
-                <th>Swap</th>
-                <th>Gain</th>
-                <th>Games</th>
-                <th>New games</th>
-              </tr>
-            </thead>
-            <tbody>
-              {r.tried.slice(0, 12).map((t, j) => (
-                <tr key={j}>
-                  <td>
-                    <Swap db={db} out={t.out} inn={t.in} copies={t.copies} />
-                  </td>
-                  <td className={t.delta > 0 ? "up" : t.delta < 0 ? "down" : ""}>{pts(t.delta)}</td>
-                  <td className="muted small">{t.games}</td>
-                  <td className={t.checkDelta === undefined ? "muted small" : t.checkDelta > 0 ? "up" : "down"}>{t.checkDelta === undefined ? "–" : `${pts(t.checkDelta)} (${t.checkGames})`}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
-      ))}
+                </span>
+              </td>
+              <td>{c.copies}</td>
+              <td className="muted">{c.stat ? c.stat.copies : "–"}</td>
+              <td>{c.stat ? `${c.stat.popularity}%` : <span className="muted">not in the top cards</span>}</td>
+              <td className={c.stat ? liftClass(c.stat.lift) : "muted"}>{c.stat ? lift(c.stat.lift) : "–"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }
@@ -608,10 +595,8 @@ export function Analysis({ deckId }: { deckId?: string }) {
   const [lastField, setLastField] = useState<"meta" | "all">("meta");
   const [job, setJob] = useState<AnalysisJob>();
   const [error, setError] = useState<string>();
-  const [doctor, setDoctor] = useState<DoctorState>();
-  /** Cards you chose to keep in the Doctor's next run. */
-  const [protect, setProtect] = useState<string[]>([]);
-  const [depth, setDepth] = useState<keyof typeof DEPTHS>("Normal");
+  const [doctor, setDoctor] = useState<"running" | { deck: DeckData; advice: MetaAdvice; keep: string[] }>();
+
   const [against, setAgainst] = useState<"meta" | "all">("meta");
 
   useEffect(() => {
@@ -636,8 +621,7 @@ export function Analysis({ deckId }: { deckId?: string }) {
   }, [deckId]);
   // Leaving the page stops games running on this device.
   const abort = useRef<AbortController | null>(null);
-  const doctorAbort = useRef<AbortController | null>(null);
-  useEffect(() => () => (abort.current?.abort(), doctorAbort.current?.abort()), []);
+  useEffect(() => () => abort.current?.abort(), []);
 
   const active = job && (job.status === "queued" || job.status === "running");
   useEffect(() => {
@@ -711,36 +695,24 @@ export function Analysis({ deckId }: { deckId?: string }) {
     }
   };
 
-  /** Deck Doctor on this device (no server fallback: far too many games for the free server). */
-  const runDoctor = async (protect: string[] = []) => {
+  /** Deck Doctor: the deck against what the ladder's winning lists of its archetype play (no games needed). */
+  const runDoctor = async (keep: string[] = []) => {
     setError(undefined);
-    setProtect(protect);
-    doctorAbort.current?.abort();
-    const ctl = (doctorAbort.current = new AbortController());
     let deck: DeckData;
     try {
       deck = await target();
     } catch (e) {
       return setError(String((e as Error).message ?? e));
     }
-    setDoctor({ status: "running", text: "Starting", done: 0, total: 1 });
+    setDoctor("running");
     try {
-      const all = await api.analysisPool();
-      const meta = metaPool(all);
-      const pool = against === "meta" && meta.length >= 3 ? meta : [...all, ...addedMetaDecks()];
-      const report = await doctorInBrowser(deck, pool, { ...DEPTHS[depth], protect }, (text, done, total) => !ctl.signal.aborted && setDoctor({ status: "running", text, done, total }), ctl.signal);
-      setDoctor({ status: "done", report });
+      setDoctor({ deck, advice: await metaAdviceFor(deck, keep), keep });
     } catch (e) {
-      if (ctl.signal.aborted) return;
       setDoctor(undefined);
       setError(String((e as Error).message ?? e));
     }
   };
-  const stopDoctor = () => {
-    doctorAbort.current?.abort();
-    setDoctor(undefined);
-  };
-  const doctoring = doctor?.status === "running";
+  const doctoring = doctor === "running";
 
   if (!db) return <div className="center-msg">{error ?? "Loading cards…"}</div>;
   return (
@@ -844,36 +816,21 @@ export function Analysis({ deckId }: { deckId?: string }) {
         )}
         {job?.status === "error" && <div className="banner error">{job.error}</div>}
         <div className="an-options">
-          <span className="small muted">Deck Doctor</span>
-          {(Object.keys(DEPTHS) as (keyof typeof DEPTHS)[]).map((d) => (
-            <button key={d} className={`chip ${depth === d ? "sel" : ""}`} disabled={doctoring} onClick={() => setDepth(d)}>
-              {d}
-            </button>
-          ))}
-          {doctoring ? (
-            <button className="btn" onClick={stopDoctor}>
-              Stop
-            </button>
-          ) : (
-            <button className="btn primary" disabled={source === "list" ? !text.trim() : !pick && !builderDeck} onClick={() => void runDoctor([])}>
-              Find improvements
-            </button>
-          )}
+          <span className="small muted">Deck Doctor: your deck against the ladder's winning lists</span>
+          <button className="btn primary" disabled={doctoring || (source === "list" ? !text.trim() : !pick && !builderDeck)} onClick={() => void runDoctor([])}>
+            {doctoring ? "Reading the ladder…" : "Find improvements"}
+          </button>
         </div>
-        {doctor?.status === "running" && (
-          <div className="an-progress">
-            <span className="an-bar wide">
-              <span style={{ width: doctor.total ? pct(doctor.done / doctor.total) : "0%" }} />
-            </span>
-            <span className="small muted">
-              {doctor.text}
-              {doctor.total > 1 ? ` ${doctor.done}/${doctor.total}` : ""}
-            </span>
-          </div>
-        )}
       </section>
-      {doctor?.status === "done" && (
-        <DoctorView key={doctor.report.ms} db={db} report={doctor.report} protect={protect} onKeep={(slug) => void runDoctor([...protect, slug])} />
+      {doctor && doctor !== "running" && (
+        <LadderDoctorView
+          key={JSON.stringify(doctor.keep)}
+          db={db}
+          deck={doctor.deck}
+          advice={doctor.advice}
+          keep={doctor.keep}
+          onKeep={(slug) => void runDoctor([...doctor.keep, slug])}
+        />
       )}
       {job?.report && <Report db={db} report={job.report} decks={decks} ladder={ladderOf(job.report.deck as DeckData, lastPool)} bot={lastBot} field={lastField} />}
     </div>
