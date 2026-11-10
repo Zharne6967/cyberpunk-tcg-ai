@@ -179,6 +179,9 @@ function LadderDeck({
               ≈ {pct(Math.min(1, result.rate + STRONG.offset / 100))} on the ladder (±{STRONG.miss} pts)
             </span>
           </div>
+          <p className="muted small">
+            {CHECK_PER} games against each deck: one matchup can swing a lot, the total over {result.games} games is the reliable number.
+          </p>
           <div className="an-grid">
             <div>
               <h3>Strong against</h3>
