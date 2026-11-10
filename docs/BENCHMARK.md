@@ -88,3 +88,22 @@ jednostronnie z = 1.77, p ≈ 0.04). Nowy model zastąpił `packages/ai/src/ismc
 | ISMCTS 100 vs Hard | 27/32 = 84.4% | 933 |
 
 Stąd bot symulacyjny `ismcts-sim` („Strong (simulations)”): 40 symulacji na ruch, bez limitu czasu.
+
+## Analiza vs ladder ChoomBattlera (2026-11-10)
+7 list meta (Standard lists z ChoomBattlera) przeciw tej samej puli 9 talii meta, `pnpm lab --check`:
+Easy 16 partii na rywala, Strong (`ismcts-sim`) 6 partii na rywala; ladder = ChoomBattler, Core BO1, 30 dni.
+
+| Talia | Easy | Strong | Ladder |
+|---|---|---|---|
+| Adam / Dexter / Padre | 40% | 57% | 64.9% |
+| Adam / River / Viktor | 53% | 57% | 54.0% |
+| Adam / Saburo / V | 69% | 50% | 58.9% |
+| Dexter / Padre / V | 47% | 50% | 62.8% |
+| Adam / Padre / V | 58% | 48% | 56.6% |
+| Adam / Hanako / Padre | 36% | 43% | 47.6% |
+| Alt / Hanako / Jackie | 32% | 39% | 50.2% |
+
+Średni błąd bez poprawki: Easy 11.9 pkt, Strong 8.1 pkt. Ladder ma też słabsze talie, więc jego wyniki są średnio
+wyższe (talie meta: 56.4%; w puli samych talii meta średnia to ~49%). Po dodaniu tej różnicy (Easy +9, Strong +7)
+błąd: **Easy 10.3 pkt, Strong 3.7 pkt**. Deck Analysis pokazuje więc „Estimated ladder win rate” (wynik + poprawka)
+przy grze z taliami meta, domyślnie botami Strong (4 partie na rywala, ~2,5 min w przeglądarce).

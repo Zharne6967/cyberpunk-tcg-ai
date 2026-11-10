@@ -14,7 +14,29 @@ const REPORT_KEY = "cpai.analysis.report";
 const LOCAL = "local";
 /** Deck Builder → analysis handoff for a deck that is not saved yet. */
 export const HANDOFF_KEY = "cpai.analysis.deck";
-const GAMES = [4, 8, 16];
+/** Games per matchup: Easy bots play a game in a blink, Strong bots in seconds. */
+const GAMES: Record<string, number[]> = { greedy: [4, 8, 16], "ismcts-sim": [2, 4, 8] };
+const BOTS: { id: string; label: string }[] = [
+  { id: "ismcts-sim", label: "Strong" },
+  { id: "greedy", label: "Easy (fast)" },
+];
+/**
+ * From a result against the meta decks to the ChoomBattler ladder (Core BO1, 30 days), measured on the
+ * 7 meta decks (docs/BENCHMARK.md, 2026-11-10): the ladder also has weaker decks, so its win rates are
+ * higher by `offset` points on average; after adding it, the estimate is off by `miss` points on average.
+ */
+const LADDER: Record<string, { offset: number; miss: number }> = { greedy: { offset: 9, miss: 10 }, "ismcts-sim": { offset: 7, miss: 4 } };
+
+/** The ladder win rate of a list from the meta pool (its source note), if the analysed deck is one. */
+function ladderOf(deck: DeckData, pool: DeckData[]): { rate: number; share: number | null } | null {
+  const key = (d: DeckData) => JSON.stringify([[...d.legends].sort(), Object.entries(d.main).sort(([a], [b]) => a.localeCompare(b))]);
+  const ref = pool.find((d) => d.id === deck.id || key(d) === key(deck)) as (DeckData & { source?: { note?: string } }) | undefined;
+  const note = ref?.source?.note ?? "";
+  const rate = /([\d.]+)% win rate/.exec(note);
+  if (!rate) return null;
+  const share = /([\d.]+)% of the field/.exec(note);
+  return { rate: Number(rate[1]) / 100, share: share ? Number(share[1]) / 100 : null };
+}
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 /** Deck Doctor search sizes (games at each racing stage, swaps kept after each, fresh games per finalist). */
 const DEPTHS: Record<"Quick" | "Normal" | "Deep", Partial<DoctorOptions>> = {
@@ -174,8 +196,11 @@ function ProfileTable({ a, b }: { a: DeckProfile; b: DeckProfile }) {
   );
 }
 
-/** The report in two sentences: the total, the best and the worst matchups, and how far to trust it. */
-function Summary({ report }: { report: AnalysisReport }) {
+/** The report in a few sentences: the total, the best and the worst matchups, the ladder, how far to trust it. */
+function Summary({ report, ladder, bot, field }: { report: AnalysisReport; ladder: { rate: number; share: number | null } | null; bot: string; field: "meta" | "all" }) {
+  const cal = LADDER[bot];
+  // Only against the meta decks: that is what the ladder offset was measured on.
+  const estimate = cal && field === "meta" ? Math.min(0.99, report.overall.rate + cal.offset / 100) : null;
   const sorted = [...report.matchups].sort((a, b) => b.rate - a.rate);
   const best = sorted.slice(0, 2);
   const worst = sorted.slice(-2).reverse();
@@ -191,14 +216,37 @@ function Summary({ report }: { report: AnalysisReport }) {
           </>
         )}
       </p>
+      {estimate !== null && (
+        <p className="small">
+          Estimated ladder win rate: <b>about {pct(estimate)}</b>
+          {ladder ? (
+            <>
+              {" "}
+              · on the ChoomBattler ladder this list wins <b>{pct(ladder.rate)}</b>
+              {ladder.share !== null ? ` (${pct(ladder.share)} of the games)` : ""}
+            </>
+          ) : null}
+          . The ladder has weaker decks too, so its win rates are higher than here, where only the top decks play each other
+          (+{cal!.offset} points on average); 50% here means as strong as the average top deck.
+        </p>
+      )}
+      {estimate === null && ladder && (
+        <p className="small">
+          On the ChoomBattler ladder this list wins <b>{pct(ladder.rate)}</b>: that is against everyone who plays, weaker decks too.
+        </p>
+      )}
       <p className="muted small">
-        Easy bots on both sides: a first look. With {report.gamesPerMatchup} games per deck one matchup can be off by a lot (0/8 can be bad luck); the total is steadier.
+        {report.bot} bots on both sides.{" "}
+        {bot === "greedy"
+          ? `Easy bots misplay decks that need skill (Gear, Programs with conditions): on the meta decks their estimate is off by ${LADDER.greedy!.miss} points on average, Strong bots' by ${LADDER["ismcts-sim"]!.miss}. Use Strong bots for a verdict.`
+          : `On the meta decks this estimate is off by ${LADDER["ismcts-sim"]!.miss} points on average.`}{" "}
+        With {report.gamesPerMatchup} games per deck one matchup can be off by a lot; the total is steadier.
       </p>
     </>
   );
 }
 
-function Report({ db, report, decks }: { db: CardDb; report: AnalysisReport; decks: DeckSummary[] }) {
+function Report({ db, report, decks, ladder, bot, field }: { db: CardDb; report: AnalysisReport; decks: DeckSummary[]; ladder: { rate: number; share: number | null } | null; bot: string; field: "meta" | "all" }) {
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
   const weaknesses = report.findings.filter((f) => f.kind === "weakness");
@@ -226,7 +274,7 @@ function Report({ db, report, decks }: { db: CardDb; report: AnalysisReport; dec
         </div>
         <div>
           <h2>{report.deck.name}</h2>
-          <Summary report={report} />
+          <Summary report={report} ladder={ladder} bot={report.bot.startsWith("Strong") ? "ismcts-sim" : report.bot === "Easy" ? "greedy" : bot} field={field} />
           <div className="an-overall">
             <Rate r={report.overall} />
             <span className="muted small">
@@ -552,7 +600,12 @@ export function Analysis({ deckId }: { deckId?: string }) {
   const [source, setSource] = useState<"deck" | "list">("deck");
   const [pick, setPick] = useState(deckId && deckId !== "builder" ? deckId : "");
   const [text, setText] = useState("");
-  const [games, setGames] = useState(8);
+  const [bot, setBot] = useState("ismcts-sim");
+  const [games, setGames] = useState(4);
+  /** The pool the last analysis played (for the ladder win rate of a meta list). */
+  const [lastPool, setLastPool] = useState<DeckData[]>([]);
+  const [lastBot, setLastBot] = useState("greedy");
+  const [lastField, setLastField] = useState<"meta" | "all">("meta");
   const [job, setJob] = useState<AnalysisJob>();
   const [error, setError] = useState<string>();
   const [doctor, setDoctor] = useState<DoctorState>();
@@ -637,7 +690,10 @@ export function Analysis({ deckId }: { deckId?: string }) {
       const all = await api.analysisPool();
       const meta = metaPool(all);
       const pool = against === "meta" && meta.length >= 3 ? meta : [...all, ...addedMetaDecks()];
-      const report = await analyzeInBrowser(deck, pool, games, (done, total) => !ctl.signal.aborted && setJob({ id: LOCAL, status: "running", done, total }), ctl.signal);
+      setLastPool(all);
+      setLastBot(bot);
+      setLastField(pool === meta ? "meta" : "all");
+      const report = await analyzeInBrowser(deck, pool, games, (done, total) => !ctl.signal.aborted && setJob({ id: LOCAL, status: "running", done, total }), ctl.signal, bot);
       setJob({ id: LOCAL, status: "done", done: report.overall.games, total: report.overall.games, report });
       remember(REPORT_KEY, JSON.stringify(report));
       return;
@@ -745,8 +801,23 @@ export function Analysis({ deckId }: { deckId?: string }) {
           </button>
         </div>
         <div className="an-options">
+          <span className="small muted">Bots</span>
+          {BOTS.map((b) => (
+            <button
+              key={b.id}
+              className={`chip ${bot === b.id ? "sel" : ""}`}
+              disabled={!!active}
+              onClick={() => {
+                setBot(b.id);
+                setGames(b.id === "greedy" ? 8 : 4);
+              }}
+            >
+              {b.label}
+            </button>
+          ))}
+          <span className="an-sep" />
           <span className="small muted">Games per matchup</span>
-          {GAMES.map((g) => (
+          {GAMES[bot]!.map((g) => (
             <button key={g} className={`chip ${games === g ? "sel" : ""}`} onClick={() => setGames(g)}>
               {g}
             </button>
@@ -804,7 +875,7 @@ export function Analysis({ deckId }: { deckId?: string }) {
       {doctor?.status === "done" && (
         <DoctorView key={doctor.report.ms} db={db} report={doctor.report} protect={protect} onKeep={(slug) => void runDoctor([...protect, slug])} />
       )}
-      {job?.report && <Report db={db} report={job.report} decks={decks} />}
+      {job?.report && <Report db={db} report={job.report} decks={decks} ladder={ladderOf(job.report.deck as DeckData, lastPool)} bot={lastBot} field={lastField} />}
     </div>
   );
 }

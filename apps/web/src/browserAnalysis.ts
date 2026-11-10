@@ -30,6 +30,7 @@ export async function analyzeInBrowser(
   perMatchup: number,
   onProgress: (done: number, total: number) => void,
   signal: AbortSignal,
+  bot = "greedy",
 ): Promise<AnalysisReport> {
   if (typeof Worker === "undefined") throw new Error("Web Workers are not available");
   const threads = browserThreads();
@@ -60,7 +61,7 @@ export async function analyzeInBrowser(
                 else if (data.type === "error") reject(new Error(data.message));
               };
               w.onerror = (e) => reject(new Error(e.message || "The analysis worker failed"));
-              w.postMessage({ type: "play", target, pool, perMatchup, shard, shards: threads });
+              w.postMessage({ type: "play", target, pool, perMatchup, shard, shards: threads, bot });
             }),
         ),
       ),
@@ -73,7 +74,7 @@ export async function analyzeInBrowser(
           if (data.type === "report") resolve(data.report);
           else if (data.type === "error") reject(new Error(data.message));
         };
-        w0.postMessage({ type: "report", target, pool, perMatchup, outcomes, ms: performance.now() - t0 });
+        w0.postMessage({ type: "report", target, pool, perMatchup, outcomes, ms: performance.now() - t0, bot });
       }),
     ]);
   } finally {

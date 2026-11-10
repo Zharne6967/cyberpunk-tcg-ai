@@ -13,7 +13,7 @@ import { playMatch, type MatchOutcome } from "./match.ts";
 
 export type AnalysisWorkerIn =
   | { type: "play"; job?: number; target: Deck; pool: Deck[]; perMatchup: number; shard: number; shards: number; seed?: string; bot?: string }
-  | { type: "report"; job?: number; target: Deck; pool: Deck[]; perMatchup: number; outcomes: (MatchOutcome | null)[]; ms: number }
+  | { type: "report"; job?: number; target: Deck; pool: Deck[]; perMatchup: number; outcomes: (MatchOutcome | null)[]; ms: number; bot?: string }
   | { type: "propose"; job?: number; deck: Deck; opponents: Deck[]; outcomes: (MatchOutcome | null)[]; cuts: number; adds: number; keep?: string[] }
   | { type: "opponents"; job?: number; target: Deck; pool: Deck[] }
   | { type: "labSeed"; job?: number; pool: Deck[]; count: number; seed: string; keep?: string[]; values?: Record<string, number> }
@@ -50,9 +50,10 @@ ctx.onmessage = ({ data }) => {
       ctx.postMessage({ type: "opponents", job, opponents: doctorOpponents(data.target, data.pool) });
       return;
     }
-    const { specs, opponents } = planGauntlet(data.target, data.pool, data.perMatchup, data.type === "play" ? (data.bot ?? "greedy") : "greedy", data.type === "play" ? (data.seed ?? "analysis") : "analysis");
+    const bot = data.bot ?? "greedy";
+    const { specs, opponents } = planGauntlet(data.target, data.pool, data.perMatchup, bot, data.type === "play" ? (data.seed ?? "analysis") : "analysis");
     if (data.type === "report") {
-      ctx.postMessage({ type: "report", job, report: buildReport(data.target, opponents, specs, data.outcomes, data.ms) });
+      ctx.postMessage({ type: "report", job, report: buildReport(data.target, opponents, specs, data.outcomes, data.ms, bot) });
       return;
     }
     ctx.postMessage({ type: "plan", job, total: specs.length });
