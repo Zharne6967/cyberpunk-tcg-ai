@@ -16,6 +16,7 @@ import { getCatalog, isDeckLegal, type Deck } from "@cpai/core";
 import type { MatchOutcome } from "./match.ts";
 import { legendRamBudget, planGauntlet } from "./analysis.ts";
 import { doctorLoop, type DoctorOptions, type DoctorReport, type RunGauntlet } from "./doctor-loop.ts";
+import { poolShape, shapeDistance } from "./lab.ts";
 
 export * from "./doctor-loop.ts";
 
@@ -38,11 +39,38 @@ export function swapCard(deck: Deck, out: string, inn: string): { deck: Deck; co
   return isDeckLegal(next) ? { deck: next, copies } : null;
 }
 
-/** Main-deck cards ranked from least to most useful in these games. */
-export function weakCards(deck: Deck, outcomes: (MatchOutcome | null)[], n: number): string[] {
+/**
+ * The deck's core: cards that at least half of the pool's decks with the same colours play (the
+ * archetype's backbone — players found them essential, whatever the bots make of them).
+ */
+export function coreCards(deck: Deck, pool: Deck[]): { slug: string; share: number }[] {
+  const catalog = getCatalog();
+  const colors = new Set(Object.keys(legendRamBudget(deck)));
+  const others = pool.filter((d) => d.id !== deck.id);
+  const similar = others.filter((d) => {
+    const c = Object.keys(legendRamBudget(d));
+    return c.filter((x) => colors.has(x)).length >= Math.min(2, colors.size) && c.length <= colors.size + 1;
+  });
+  const budgets = others.map((d) => ({ d, budget: legendRamBudget(d) }));
+  const out: { slug: string; share: number }[] = [];
+  for (const slug of Object.keys(deck.main)) {
+    // 1. Decks with the same colours: the archetype's backbone.
+    const archetype = similar.length >= 2 ? similar.filter((d) => (d.main[slug] ?? 0) > 0).length / similar.length : 0;
+    // 2. Every deck that could play the card (its colour, enough RAM): a staple of that colour.
+    const c = catalog.bySlug(slug);
+    const able = c ? budgets.filter((x) => (x.budget[c.color] ?? -1) >= (c.ram ?? 0)) : [];
+    const staple = able.length >= 3 ? able.filter((x) => (x.d.main[slug] ?? 0) > 0).length / able.length : 0;
+    const share = Math.max(archetype, staple);
+    if (share >= 0.5) out.push({ slug, share });
+  }
+  return out.sort((a, b) => b.share - a.share);
+}
+
+/** Main-deck cards ranked from least to most useful in these games (never the protected ones). */
+export function weakCards(deck: Deck, outcomes: (MatchOutcome | null)[], n: number, protect: Set<string> = new Set()): string[] {
   const games = outcomes.filter((o): o is MatchOutcome => !!o);
   const overall = winRate(games);
-  const scored = Object.keys(deck.main).map((slug) => {
+  const scored = Object.keys(deck.main).filter((slug) => !protect.has(slug)).map((slug) => {
     const played = games.filter((o) => o.cardsA.played.includes(slug));
     const notPlayed = games.length - played.length;
     const wp = played.length ? played.filter((o) => o.winner === "A").length / played.length : overall;
@@ -97,19 +125,35 @@ export function doctorOpponents(deck: Deck, pool: Deck[]): Deck[] {
   return planGauntlet(deck, pool, 2).opponents;
 }
 
-/** Legal "−1 cut, +1 add" variants for this deck and these results (the worker side of the loop). */
-export function proposeSwaps(deck: Deck, opponents: Deck[], outcomes: (MatchOutcome | null)[], cuts: number, adds: number): { out: string; in: string; copies: number; deck: Deck }[] {
+/**
+ * Legal swaps for this deck and these results (the worker side of the loop), and the cards kept out
+ * of them: the deck's core (share of similar pool decks playing it) and the ones you chose (share null).
+ */
+export function proposeSwaps(
+  deck: Deck,
+  opponents: Deck[],
+  outcomes: (MatchOutcome | null)[],
+  cuts: number,
+  adds: number,
+  keep: string[] = [],
+): { variants: { out: string; in: string; copies: number; deck: Deck }[]; kept: { slug: string; share: number | null }[] } {
   const out: { out: string; in: string; copies: number; deck: Deck }[] = [];
+  const core = coreCards(deck, opponents);
+  const kept = [...keep.filter((k) => deck.main[k]).map((slug) => ({ slug, share: null as number | null })), ...core.filter((c) => !keep.includes(c.slug))];
+  const protect = new Set(kept.map((k) => k.slug));
   const add = candidateCards(deck, opponents, outcomes, adds);
-  for (const cut of weakCards(deck, outcomes, cuts))
+  // Never further from how the pool's decks are built (Units vs sellable Gear and Programs, 5+ cards).
+  const shape = poolShape(opponents);
+  const now = shapeDistance(deck.main, shape);
+  for (const cut of weakCards(deck, outcomes, cuts, protect))
     for (const inn of add) {
       const next = swapCard(deck, cut, inn);
-      if (next) out.push({ out: cut, in: inn, copies: next.copies, deck: next.deck });
+      if (next && shapeDistance(next.deck.main, shape) <= now) out.push({ out: cut, in: inn, copies: next.copies, deck: next.deck });
     }
-  return out;
+  return { variants: out, kept };
 }
 
 /** The whole Doctor in one process (CLI): cards from the catalog, games from the given runner. */
 export function deckDoctor(deck: Deck, pool: Deck[], run: RunGauntlet<Deck, MatchOutcome>, options: Partial<DoctorOptions> = {}, onProgress?: (text: string, done: number, total: number) => void): Promise<DoctorReport<Deck>> {
-  return doctorLoop(deck, doctorOpponents(deck, pool), run, async (d, o, r, c, a) => proposeSwaps(d, o, r, c, a), options, onProgress);
+  return doctorLoop(deck, doctorOpponents(deck, pool), run, async (d, o, r, c, a, k) => proposeSwaps(d, o, r, c, a, k), options, onProgress);
 }

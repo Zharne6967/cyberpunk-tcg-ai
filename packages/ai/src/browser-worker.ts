@@ -14,7 +14,7 @@ import { playMatch, type MatchOutcome } from "./match.ts";
 export type AnalysisWorkerIn =
   | { type: "play"; job?: number; target: Deck; pool: Deck[]; perMatchup: number; shard: number; shards: number; seed?: string; bot?: string }
   | { type: "report"; job?: number; target: Deck; pool: Deck[]; perMatchup: number; outcomes: (MatchOutcome | null)[]; ms: number }
-  | { type: "propose"; job?: number; deck: Deck; opponents: Deck[]; outcomes: (MatchOutcome | null)[]; cuts: number; adds: number }
+  | { type: "propose"; job?: number; deck: Deck; opponents: Deck[]; outcomes: (MatchOutcome | null)[]; cuts: number; adds: number; keep?: string[] }
   | { type: "opponents"; job?: number; target: Deck; pool: Deck[] }
   | { type: "labSeed"; job?: number; pool: Deck[]; count: number; seed: string; keep?: string[]; values?: Record<string, number> }
   | { type: "labBreed"; job?: number; parents: Deck[]; pool: Deck[]; count: number; seed: string; keep?: string[]; values?: Record<string, number> };
@@ -24,7 +24,7 @@ export type AnalysisWorkerOut =
   | { type: "outcome"; job?: number; index: number; outcome: MatchOutcome | null }
   | { type: "done"; job?: number }
   | { type: "report"; job?: number; report: AnalysisReport }
-  | { type: "proposed"; job?: number; variants: { out: string; in: string; copies: number; deck: Deck }[] }
+  | { type: "proposed"; job?: number; proposal: ReturnType<typeof proposeSwaps> }
   | { type: "opponents"; job?: number; opponents: Deck[] }
   | { type: "decks"; job?: number; decks: Deck[] }
   | { type: "error"; job?: number; message: string };
@@ -35,7 +35,7 @@ ctx.onmessage = ({ data }) => {
   const job = data.job;
   try {
     if (data.type === "propose") {
-      ctx.postMessage({ type: "proposed", job, variants: proposeSwaps(data.deck, data.opponents, data.outcomes, data.cuts, data.adds) });
+      ctx.postMessage({ type: "proposed", job, proposal: proposeSwaps(data.deck, data.opponents, data.outcomes, data.cuts, data.adds, data.keep ?? []) });
       return;
     }
     if (data.type === "labSeed") {

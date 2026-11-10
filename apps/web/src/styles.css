@@ -597,3 +597,8 @@ a { color: var(--cyan); }
 .lab-pool summary { cursor: pointer; }
 .lab-history { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .lab-select { background: #101014; color: inherit; border: 1px solid var(--line); border-radius: 3px; padding: 3px 6px; max-width: 100%; }
+
+/* Deck Doctor report */
+.doc-verdict { margin: 4px 0; font-size: 14px; }
+.doc-actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.doc-kept { display: flex; flex-wrap: wrap; gap: 6px 14px; }

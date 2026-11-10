@@ -36,7 +36,7 @@ describe("deck doctor: cards", () => {
     const { specs, opponents } = planGauntlet(deck, pool, 2, "greedy", "doctor-test");
     const outcomes = specs.map((s) => playMatch(s));
     expect(weakCards(deck, outcomes, 3)).toHaveLength(3);
-    const variants = proposeSwaps(deck, opponents, outcomes, 3, 4);
+    const { variants } = proposeSwaps(deck, opponents, outcomes, 3, 4);
     expect(variants.length).toBeGreaterThan(0);
     for (const v of variants) {
       expect(isDeckLegal(v.deck)).toBe(true);
@@ -61,10 +61,12 @@ describe("deck doctor: search loop", () => {
     delete main[out];
     return { out, in: inn, copies, deck: { ...d, main } };
   };
-  const propose = async (d: DoctorDeck) =>
-    Object.keys(d.main)
+  const propose = async (d: DoctorDeck) => ({
+    variants: Object.keys(d.main)
       .filter((s) => s !== "good" && s !== "filler")
-      .flatMap((out) => ["good", "meh"].filter((inn) => inn !== out).map((inn) => swap(d, out, inn)));
+      .flatMap((out) => ["good", "meh"].filter((inn) => inn !== out).map((inn) => swap(d, out, inn))),
+    kept: [],
+  });
   const deck: DoctorDeck = { id: "toy", name: "Toy", legends: [], main: { bad: 2, meh: 3, filler: 35 } };
   const opponents: DoctorDeck[] = [1, 2, 3].map((i) => ({ id: `o${i}`, name: `O${i}`, legends: [], main: {} }));
   const small = { stages: [24, 48], keep: [3, 2], check: 120, confirm: 120, minGain: 0.05 };
@@ -98,4 +100,26 @@ describe("deck doctor: search loop", () => {
     expect(perOpponent(256, 6)).toBe(42);
     expect(perOpponent(10, 20)).toBe(2);
   });
+});
+
+describe("deck doctor: the deck's core stays", () => {
+  const meta = all.filter(isMetaDeck);
+  const deck = load("rogue-ai-ggr-jackie-padre-v-40");
+
+  it("finds the cards most decks with these colours play", async () => {
+    const { coreCards } = await import("./doctor.ts");
+    const core = coreCards(deck, meta).map((c) => c.slug);
+    expect(core).toContain("mantis-blades");
+    expect(core).toContain("satori-sword-of-saburo");
+  });
+
+  it("never proposes cutting a core card or a card you keep", () => {
+    const { specs, opponents } = planGauntlet(deck, meta, 2, "greedy", "core");
+    const outcomes = specs.map((s) => playMatch(s));
+    const { variants, kept } = proposeSwaps(deck, opponents, outcomes, 4, 4, ["riot-shield"]);
+    const protectedCards = new Set(kept.map((k) => k.slug));
+    expect(protectedCards.has("riot-shield")).toBe(true);
+    expect(protectedCards.has("mantis-blades")).toBe(true);
+    for (const v of variants) expect(protectedCards.has(v.out)).toBe(false);
+  }, 120_000);
 });

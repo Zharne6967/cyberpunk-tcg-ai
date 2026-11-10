@@ -23,8 +23,8 @@ const DEPTHS: Record<"Quick" | "Normal" | "Deep", Partial<DoctorOptions>> = {
   Deep: { rounds: 3, stages: [96, 192, 384], keep: [8, 3, 2], check: 800, cuts: 5, adds: 8, confirm: 800 },
 };
 type DoctorState = { status: "running"; text: string; done: number; total: number } | { status: "done"; report: DoctorReport<DeckData> };
-/** Games per opponent for the check with Hard bots (fewer leave a ±15-point interval). */
-const VERIFY_PER = 12;
+/** Games per opponent for the check with Strong bots (seconds per game on this device). */
+const VERIFY_PER = 4;
 
 function readHandoff(): DeckData | undefined {
   try {
@@ -174,6 +174,30 @@ function ProfileTable({ a, b }: { a: DeckProfile; b: DeckProfile }) {
   );
 }
 
+/** The report in two sentences: the total, the best and the worst matchups, and how far to trust it. */
+function Summary({ report }: { report: AnalysisReport }) {
+  const sorted = [...report.matchups].sort((a, b) => b.rate - a.rate);
+  const best = sorted.slice(0, 2);
+  const worst = sorted.slice(-2).reverse();
+  const list = (ms: typeof sorted) => ms.map((m) => `${m.deckName} (${pct(m.rate)})`).join(" and ");
+  return (
+    <>
+      <p className="doc-verdict">
+        This deck wins <b>{pct(report.overall.rate)}</b> of its games against these {report.matchups.length} decks.
+        {sorted.length >= 4 && (
+          <>
+            {" "}
+            Best against {list(best)}; worst against {list(worst)}.
+          </>
+        )}
+      </p>
+      <p className="muted small">
+        Easy bots on both sides: a first look. With {report.gamesPerMatchup} games per deck one matchup can be off by a lot (0/8 can be bad luck); the total is steadier.
+      </p>
+    </>
+  );
+}
+
 function Report({ db, report, decks }: { db: CardDb; report: AnalysisReport; decks: DeckSummary[] }) {
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
@@ -202,6 +226,7 @@ function Report({ db, report, decks }: { db: CardDb; report: AnalysisReport; dec
         </div>
         <div>
           <h2>{report.deck.name}</h2>
+          <Summary report={report} />
           <div className="an-overall">
             <Rate r={report.overall} />
             <span className="muted small">
@@ -335,18 +360,28 @@ function Swap({ db, out, inn, copies }: { db: CardDb; out: string; inn: string; 
   );
 }
 
-const pts = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)} pts`;
+const pts = (x: number) => `${x >= 0 ? "+" : ""}${Math.round(x * 100)} pts`;
 
-function DoctorView({ db, report }: { db: CardDb; report: DoctorReport<DeckData> }) {
+/** "better", "worse" or "within chance" for two win rates on n games each (two standard errors). */
+function difference(before: number, after: number, n: number): "better" | "worse" | "same" {
+  const se = Math.sqrt((before * (1 - before) + after * (1 - after)) / Math.max(1, n));
+  if (after - before > 2 * se) return "better";
+  if (before - after > 2 * se) return "worse";
+  return "same";
+}
+
+function DoctorView({ db, report, protect, onKeep }: { db: CardDb; report: DoctorReport<DeckData>; protect: string[]; onKeep: (slug: string) => void }) {
   const [saved, setSaved] = useState<DeckSummary>();
   const [error, setError] = useState<string>();
   const [check, setCheck] = useState<{ done: number; total: number } | Confirmation>();
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
+  const name = (slug: string) => db.bySlug.get(slug)?.displayName ?? slug;
   const c = report.confirm;
   const first = report.rounds[0];
-  // Every cut candidate once, with its best measured swap (tried: most games first, then gain).
-  const weak = first ? first.tried.filter((t, i) => first.tried.findIndex((x) => x.out === t.out) === i) : [];
+  // Every card tried for a swap, once, with its best measured replacement (most games first, then gain).
+  const tried = first ? first.tried.filter((t, i) => first.tried.findIndex((x) => x.out === t.out) === i) : [];
+  const accepted = report.rounds.map((r) => r.accepted).filter((a): a is NonNullable<typeof a> => !!a);
   const save = async () => {
     setError(undefined);
     try {
@@ -361,117 +396,136 @@ function DoctorView({ db, report }: { db: CardDb; report: DoctorReport<DeckData>
     const ctl = (abort.current = new AbortController());
     setCheck({ done: 0, total: 0 });
     try {
-      const result = await confirmInBrowser(report.original, report.improved, report.opponents, VERIFY_PER, "masterful", (done, total) => !ctl.signal.aborted && setCheck({ done, total }), ctl.signal);
-      setCheck(result);
+      setCheck(await confirmInBrowser(report.original, report.improved, report.opponents, VERIFY_PER, "ismcts-sim", (done, total) => !ctl.signal.aborted && setCheck({ done, total }), ctl.signal));
     } catch (e) {
       if (ctl.signal.aborted) return;
       setCheck(undefined);
       setError(String((e as Error).message ?? e));
     }
   };
-  const Result = ({ r }: { r: Confirmation }) => (
-    <span className="an-doc-result" title={`95% intervals ${pct(r.beforeCi[0])}–${pct(r.beforeCi[1])} → ${pct(r.afterCi[0])}–${pct(r.afterCi[1])}`}>
-      <b>{pct(r.before)}</b> <span className="muted">→</span> <b className={r.after > r.before ? "up" : r.after < r.before ? "down" : ""}>{pct(r.after)}</b>
-    </span>
-  );
+  const verdict = (r: Confirmation) => difference(r.before, r.after, r.games);
   return (
     <section className="panel an-doctor">
       <h2>Deck Doctor: {report.original.name}</h2>
-      <div className="an-overall">
-        <span>Win rate</span>
-        {report.changes.length ? (
-          <Result r={c} />
-        ) : (
-          <b className="an-doc-result" title={`95% interval ${pct(c.beforeCi[0])}–${pct(c.beforeCi[1])}`}>
-            {pct(c.before)}
-          </b>
-        )}
-        <span className="muted small">
-          {c.games} new games against {report.opponents.length} decks · Easy bots on both sides · {report.games} games in all · {(report.ms / 1000).toFixed(0)} s
-        </span>
-      </div>
-      {error && <div className="banner error">{error}</div>}
-      <h3>Changes</h3>
       {report.changes.length ? (
-        <ul className="an-findings">
-          {report.changes.map((x, i) => (
-            <li key={i}>
-              <Swap db={db} out={x.out} inn={x.in} copies={x.copies} />
-            </li>
-          ))}
-        </ul>
+        <p className="doc-verdict">
+          {report.changes.length === 1 ? "1 change" : `${report.changes.length} changes`} suggested. With {report.changes.length === 1 ? "it" : "them"} the deck won{" "}
+          <b className="up">{pct(c.after)}</b> of {c.games} new games, without {report.changes.length === 1 ? "it" : "them"} <b>{pct(c.before)}</b>.
+        </p>
       ) : (
-        <p className="muted small">No swap clearly improved the deck against these decks.</p>
+        <p className="doc-verdict">
+          No change clearly improved this deck. It won <b>{pct(c.before)}</b> of {c.games} games against these decks.
+        </p>
       )}
-      <div className="an-counter-actions">
-        {report.changes.length > 0 &&
-          (saved ? (
-            <a className="btn small" href={`#/builder/${saved.id}`}>
-              Open in Deck Builder
-            </a>
-          ) : (
-            <button className="btn small primary" onClick={save}>
-              Save as a new deck
-            </button>
-          ))}
-        {report.changes.length > 0 && (!check || "before" in check) && (
-          <button className="btn small" onClick={verify}>
-            Check with Hard bots
-          </button>
-        )}
-        {check && !("before" in check) && (
-          <span className="an-progress">
-            <span className="an-bar wide">
-              <span style={{ width: check.total ? pct(check.done / check.total) : "0%" }} />
-            </span>
-            <span className="small muted">
-              Hard bots: {check.done}/{check.total || "…"}
-            </span>
-          </span>
-        )}
-        {check && "before" in check && (
-          <span className="an-overall">
-            <span className="small">Hard bots</span>
-            <Result r={check} />
-            <span className="muted small">
-              {check.games} games · 95%: {pct(check.beforeCi[0])}–{pct(check.beforeCi[1])} → {pct(check.afterCi[0])}–{pct(check.afterCi[1])}
-            </span>
-          </span>
-        )}
-      </div>
-      {weak.length > 0 && (
+      <p className="muted small">
+        Easy bots on both sides · {report.opponents.length} decks · {report.games} games · {(report.ms / 1000).toFixed(0)} s. Easy bots misplay some cards (Gear, Programs with
+        conditions), so check a change with Strong bots before you rely on it.
+      </p>
+      {error && <div className="banner error">{error}</div>}
+
+      {report.changes.length > 0 && (
         <>
-          <h3>Weakest cards</h3>
-          <p className="muted small">Lowest win rate when played, or rarely played. Each one was swapped for other cards in new games.</p>
+          <h3>Suggested changes</h3>
           <ul className="an-findings">
-            {weak.map((t) => (
-              <li key={t.out}>
-                <span className="an-swap">
-                  <Thumb db={db} slug={t.out} />
-                  <span className="small">{db.bySlug.get(t.out)?.displayName ?? t.out}</span>
-                </span>
-                <span className="small muted">
-                  {(t.checkDelta ?? t.delta) > 0 ? (
-                    <>
-                      best swap: +{t.copies} {db.bySlug.get(t.in)?.displayName ?? t.in} ({pts(t.checkDelta ?? t.delta)}
-                      {t.checkGames ? " on new games" : ""})
-                    </>
-                  ) : (
-                    "no tested card did better"
-                  )}
+            {report.changes.map((x, i) => (
+              <li key={i}>
+                <Swap db={db} out={x.out} inn={x.in} copies={x.copies} />
+                <span className="doc-actions">
+                  {accepted[i]?.checkDelta !== undefined && <span className="small up">{pts(accepted[i]!.checkDelta!)} on new games</span>}
+                  <button className="btn small" title={`Run the Doctor again without ever cutting ${name(x.out)}`} onClick={() => onKeep(x.out)}>
+                    Keep {name(x.out).split(":")[0]}
+                  </button>
                 </span>
               </li>
             ))}
+          </ul>
+          <div className="an-counter-actions">
+            {saved ? (
+              <a className="btn small" href={`#/builder/${saved.id}`}>
+                Open in Deck Builder
+              </a>
+            ) : (
+              <button className="btn small primary" onClick={save}>
+                Save as a new deck
+              </button>
+            )}
+            {(!check || "before" in check) && (
+              <button className="btn small" onClick={verify}>
+                Check with Strong bots
+              </button>
+            )}
+            {check && !("before" in check) && (
+              <span className="an-progress">
+                <span className="an-bar wide">
+                  <span style={{ width: check.total ? pct(check.done / check.total) : "0%" }} />
+                </span>
+                <span className="small muted">
+                  Strong bots: {check.done}/{check.total || "…"} games
+                </span>
+              </span>
+            )}
+          </div>
+          {check && "before" in check && (
+            <p className="doc-verdict">
+              Strong bots: <b>{pct(check.before)}</b> → <b className={check.after > check.before ? "up" : check.after < check.before ? "down" : ""}>{pct(check.after)}</b> on {check.games} games each —{" "}
+              {verdict(check) === "better" ? "the changes help." : verdict(check) === "worse" ? "the changes make the deck worse: keep it as it is." : "within chance: no clear gain with Strong bots."}
+            </p>
+          )}
+        </>
+      )}
+
+      {report.kept.length > 0 && (
+        <>
+          <h3>Kept: the deck's core</h3>
+          <p className="muted small">Never cut: most decks that can play them do (same colours, enough RAM){protect.length ? ", or you chose to keep them" : ""}.</p>
+          <div className="doc-kept">
+            {report.kept.map((k) => (
+              <span key={k.slug} className="an-swap" title={k.share === null ? "Your choice" : `In ${pct(k.share)} of the decks that can play it`}>
+                <Thumb db={db} slug={k.slug} />
+                <span className="small">
+                  {name(k.slug)} <span className="muted">{k.share === null ? "· your choice" : `· ${pct(k.share)}`}</span>
+                </span>
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+
+      {tried.length > 0 && (
+        <>
+          <h3>Cards tested for a swap</h3>
+          <p className="muted small">The cards that helped least in these games; each was replaced by other cards in new games.</p>
+          <ul className="an-findings">
+            {tried.map((t) => {
+              const gain = t.checkDelta ?? t.delta;
+              return (
+                <li key={t.out}>
+                  <span className="an-swap">
+                    <Thumb db={db} slug={t.out} />
+                    <span className="small">{name(t.out)}</span>
+                  </span>
+                  <span className="small muted">{gain > 0 ? `best replacement: ${t.copies}× ${name(t.in)} (${pts(gain)}${t.checkGames ? " on new games" : ""})` : "no tested card did better: keep it"}</span>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}
       {report.rounds.map((r, i) => (
         <details key={i} className="an-doc-round">
           <summary>
-            Round {i + 1}: {r.tried.length} swaps tested · win rate {pct(r.base)}
-            {r.accepted ? ` · kept ${pts(r.accepted.checkDelta ?? r.accepted.delta)} on new games` : " · no clear gain"}
+            All swaps tested in round {i + 1} ({r.tried.length}) · the deck won {pct(r.base)}
+            {r.accepted ? ` · kept: ${pts(r.accepted.checkDelta ?? r.accepted.delta)} on new games` : " · no clear gain"}
           </summary>
           <table className="an-table">
+            <thead>
+              <tr>
+                <th>Swap</th>
+                <th>Gain</th>
+                <th>Games</th>
+                <th>New games</th>
+              </tr>
+            </thead>
             <tbody>
               {r.tried.slice(0, 12).map((t, j) => (
                 <tr key={j}>
@@ -479,9 +533,8 @@ function DoctorView({ db, report }: { db: CardDb; report: DoctorReport<DeckData>
                     <Swap db={db} out={t.out} inn={t.in} copies={t.copies} />
                   </td>
                   <td className={t.delta > 0 ? "up" : t.delta < 0 ? "down" : ""}>{pts(t.delta)}</td>
-                  <td className="muted small">{t.games} games</td>
-                  <td className={t.checkDelta === undefined ? "" : t.checkDelta > 0 ? "up" : t.checkDelta < 0 ? "down" : ""}>{t.checkDelta === undefined ? "" : pts(t.checkDelta)}</td>
-                  <td className="muted small">{t.checkGames ? `${t.checkGames} new games` : ""}</td>
+                  <td className="muted small">{t.games}</td>
+                  <td className={t.checkDelta === undefined ? "muted small" : t.checkDelta > 0 ? "up" : "down"}>{t.checkDelta === undefined ? "–" : `${pts(t.checkDelta)} (${t.checkGames})`}</td>
                 </tr>
               ))}
             </tbody>
@@ -503,6 +556,8 @@ export function Analysis({ deckId }: { deckId?: string }) {
   const [job, setJob] = useState<AnalysisJob>();
   const [error, setError] = useState<string>();
   const [doctor, setDoctor] = useState<DoctorState>();
+  /** Cards you chose to keep in the Doctor's next run. */
+  const [protect, setProtect] = useState<string[]>([]);
   const [depth, setDepth] = useState<keyof typeof DEPTHS>("Normal");
   const [against, setAgainst] = useState<"meta" | "all">("meta");
 
@@ -579,7 +634,9 @@ export function Analysis({ deckId }: { deckId?: string }) {
     // On this device first (several threads); the server plays the games when that is not possible.
     try {
       setJob({ id: LOCAL, status: "running", done: 0, total: 0 });
-      const pool = await api.analysisPool();
+      const all = await api.analysisPool();
+      const meta = metaPool(all);
+      const pool = against === "meta" && meta.length >= 3 ? meta : [...all, ...addedMetaDecks()];
       const report = await analyzeInBrowser(deck, pool, games, (done, total) => !ctl.signal.aborted && setJob({ id: LOCAL, status: "running", done, total }), ctl.signal);
       setJob({ id: LOCAL, status: "done", done: report.overall.games, total: report.overall.games, report });
       remember(REPORT_KEY, JSON.stringify(report));
@@ -599,8 +656,9 @@ export function Analysis({ deckId }: { deckId?: string }) {
   };
 
   /** Deck Doctor on this device (no server fallback: far too many games for the free server). */
-  const runDoctor = async () => {
+  const runDoctor = async (protect: string[] = []) => {
     setError(undefined);
+    setProtect(protect);
     doctorAbort.current?.abort();
     const ctl = (doctorAbort.current = new AbortController());
     let deck: DeckData;
@@ -614,7 +672,7 @@ export function Analysis({ deckId }: { deckId?: string }) {
       const all = await api.analysisPool();
       const meta = metaPool(all);
       const pool = against === "meta" && meta.length >= 3 ? meta : [...all, ...addedMetaDecks()];
-      const report = await doctorInBrowser(deck, pool, DEPTHS[depth], (text, done, total) => !ctl.signal.aborted && setDoctor({ status: "running", text, done, total }), ctl.signal);
+      const report = await doctorInBrowser(deck, pool, { ...DEPTHS[depth], protect }, (text, done, total) => !ctl.signal.aborted && setDoctor({ status: "running", text, done, total }), ctl.signal);
       setDoctor({ status: "done", report });
     } catch (e) {
       if (ctl.signal.aborted) return;
@@ -678,6 +736,15 @@ export function Analysis({ deckId }: { deckId?: string }) {
           />
         )}
         <div className="an-options">
+          <span className="small muted">Opponents</span>
+          <button className={`chip ${against === "meta" ? "sel" : ""}`} disabled={doctoring || !!active} onClick={() => setAgainst("meta")}>
+            Meta decks
+          </button>
+          <button className={`chip ${against === "all" ? "sel" : ""}`} disabled={doctoring || !!active} onClick={() => setAgainst("all")}>
+            All decks
+          </button>
+        </div>
+        <div className="an-options">
           <span className="small muted">Games per matchup</span>
           {GAMES.map((g) => (
             <button key={g} className={`chip ${games === g ? "sel" : ""}`} onClick={() => setGames(g)}>
@@ -707,13 +774,6 @@ export function Analysis({ deckId }: { deckId?: string }) {
         {job?.status === "error" && <div className="banner error">{job.error}</div>}
         <div className="an-options">
           <span className="small muted">Deck Doctor</span>
-          <button className={`chip ${against === "meta" ? "sel" : ""}`} disabled={doctoring} onClick={() => setAgainst("meta")}>
-            Meta decks
-          </button>
-          <button className={`chip ${against === "all" ? "sel" : ""}`} disabled={doctoring} onClick={() => setAgainst("all")}>
-            All decks
-          </button>
-          <span className="an-sep" />
           {(Object.keys(DEPTHS) as (keyof typeof DEPTHS)[]).map((d) => (
             <button key={d} className={`chip ${depth === d ? "sel" : ""}`} disabled={doctoring} onClick={() => setDepth(d)}>
               {d}
@@ -724,7 +784,7 @@ export function Analysis({ deckId }: { deckId?: string }) {
               Stop
             </button>
           ) : (
-            <button className="btn primary" disabled={source === "list" ? !text.trim() : !pick && !builderDeck} onClick={runDoctor}>
+            <button className="btn primary" disabled={source === "list" ? !text.trim() : !pick && !builderDeck} onClick={() => void runDoctor([])}>
               Find improvements
             </button>
           )}
@@ -741,7 +801,9 @@ export function Analysis({ deckId }: { deckId?: string }) {
           </div>
         )}
       </section>
-      {doctor?.status === "done" && <DoctorView key={doctor.report.ms} db={db} report={doctor.report} />}
+      {doctor?.status === "done" && (
+        <DoctorView key={doctor.report.ms} db={db} report={doctor.report} protect={protect} onKeep={(slug) => void runDoctor([...protect, slug])} />
+      )}
       {job?.report && <Report db={db} report={job.report} decks={decks} />}
     </div>
   );

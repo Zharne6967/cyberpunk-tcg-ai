@@ -48,6 +48,15 @@ finalistów rozstrzyga sprawdzenie botami Strong (w aplikacji: wszyscy finaliśc
 z ladderem ChoomBattlera lepiej niż Easy (Adam/Dexter/Padre 64.9% na ladderze). Talii bijącej wszystko przy mocnej
 grze nie znaleziono; następny krok: wyszukiwanie od razu na botach Strong (`pnpm lab --bot ismcts-sim`, nocą).
 
+**Kształt talii (2026-11-10, uwaga gracza: 27 Jednostek i brak kart do sprzedaży nie ma sensu).** Talie meta: 12–18
+Jednostek (najczęściej 15–16), 57–70% kart z tagiem sprzedaży (każdy Gear i Program ma tag, z Jednostek tylko jedna),
+8–11 kart za 5+. Lab buduje w kształcie puli (`poolShape`: mediana Jednostek ±2, sprzedawalne ≥ mediana − 7 pkt,
+limit kart 5+): najpierw najlepsze Jednostki do środka zakresu, potem Gear i Programy; mutacje wymieniają Jednostkę
+na Jednostkę, resztę na resztę; Deck Doctor nie proponuje zmian oddalających talię od tego kształtu. Doctor nie
+tnie też **rdzenia talii** (`coreCards`: karty grane w co najmniej połowie talii puli o tych samych kolorach) ani
+kart, które gracz każe zostawić („Keep …” przy zmianie = nowy przebieg z tą kartą chronioną); raport mówi zdaniem,
+co zmienić i o ile to pomogło, a sprawdzenie jest botami Strong (`ismcts-sim`).
+
 **Pula meta** = `data/decks/meta-*`, `rogue-ai-*` + talie dodane przez gracza („Meta pool” → *Add to the meta pool*,
 w przeglądarce, `apps/web/src/metaPool.ts`; używa jej też Deck Doctor). Dodane 2026-11-09 z ChoomBattler
 (ranked, Core BO1, 30 dni, Standard lists): Dexter/Padre/V (62.8%), Adam/Saburo/V (58.9%), Adam/Dexter/Padre (64.9%).

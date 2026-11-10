@@ -69,8 +69,65 @@ export function poolPopularity(legends: string[], pool: Deck[]): Record<string, 
   return out;
 }
 
+// ---- deck shape: how players build (Units vs sellable Gear and Programs, the cost curve)
+
+export interface DeckShape {
+  minUnits: number;
+  maxUnits: number;
+  /** Cards costing 5 or more. */
+  maxHeavy: number;
+  /** Share of cards with a sell tag (every Gear and Program has one, almost no Unit). */
+  minSellable: number;
+}
+
+/** What the meta decks look like (2026-11): 12–18 Units, 57–70% sellable, 8–11 cards costing 5+. */
+export const META_SHAPE: DeckShape = { minUnits: 13, maxUnits: 17, maxHeavy: 11, minSellable: 0.55 };
+
+export function shapeOf(main: Record<string, number>): { size: number; units: number; sellable: number; heavy: number } {
+  const catalog = getCatalog();
+  let size = 0, units = 0, sell = 0, heavy = 0;
+  for (const [slug, n] of Object.entries(main)) {
+    const c = catalog.bySlug(slug);
+    if (!c) continue;
+    size += n;
+    if (c.type === "unit") units += n;
+    if ("hasSellTag" in c && c.hasSellTag) sell += n;
+    if ((c.cost ?? 0) >= 5) heavy += n;
+  }
+  return { size, units, sellable: size ? sell / size : 0, heavy };
+}
+
+const median = (xs: number[]) => {
+  const v = [...xs].sort((a, b) => a - b);
+  return v.length ? (v[(v.length - 1) >> 1]! + v[v.length >> 1]!) / 2 : NaN;
+};
+
+/** The shape of the pool's decks (median ± a little), on 40 cards; the meta shape when the pool is empty. */
+export function poolShape(pool: Deck[]): DeckShape {
+  const shapes = pool.map((d) => shapeOf(d.main)).filter((x) => x.size >= 40);
+  if (shapes.length < 3) return META_SHAPE;
+  const units = Math.round(median(shapes.map((x) => (x.units / x.size) * 40)));
+  const heavy = Math.round(median(shapes.map((x) => (x.heavy / x.size) * 40)));
+  const sell = median(shapes.map((x) => x.sellable));
+  return { minUnits: units - 2, maxUnits: units + 2, maxHeavy: heavy + 3, minSellable: Math.max(0.4, sell - 0.07) };
+}
+
+/** How far a deck is from the shape (0 = inside): missing or extra Units, extra 5+ cards, missing sellable cards. */
+export function shapeDistance(main: Record<string, number>, shape: DeckShape): number {
+  const x = shapeOf(main);
+  const k = x.size / 40 || 1;
+  return (
+    Math.max(0, shape.minUnits * k - x.units) +
+    Math.max(0, x.units - shape.maxUnits * k) +
+    Math.max(0, x.heavy - shape.maxHeavy * k) +
+    Math.max(0, shape.minSellable - x.sellable) * x.size
+  );
+}
+
 export interface BuildContext {
   pool: Deck[];
+  /** The deck shape to keep (default: the pool's). */
+  shape?: DeckShape;
   /** Learned card values (win-rate impact, about −0.2…0.2). */
   values?: Record<string, number>;
   rng?: () => number;
@@ -78,50 +135,67 @@ export interface BuildContext {
   temperature?: number;
 }
 
+/** Units and the rest are ranked apart (the shape decides how many of each), so the heuristic stays inside a group. */
 function cardScore(c: Card, pop: number, maxPop: number, ctx: BuildContext): number {
   const popN = maxPop > 0 ? pop / maxPop : 0;
   const cost = c.cost ?? 0;
   let q = 0;
-  if (c.type === "unit") q += 0.04 * ((c.power ?? 0) - cost);
-  if ("sellTag" in c && c.sellTag) q += 0.05;
+  if (c.type === "unit") q += 0.03 * ((c.power ?? 0) - cost);
   if (cost >= 6) q -= 0.1;
   const v = ctx.values?.[c.slug] ?? 0;
   const noise = (ctx.rng?.() ?? 0.5) * (ctx.temperature ?? 0);
   return 0.6 * popN + q + 2 * v + noise;
 }
 
-/** A 40-card Main Deck for these Legends (null if they cannot make a legal deck). */
+/**
+ * A 40-card Main Deck for these Legends (null if they cannot make a legal deck), in the pool's shape:
+ * the best Units up to the middle of the Unit range, then the best Gear and Programs (all sellable),
+ * 5+ cost cards capped; only a colour pool too small for that shape gets more Units.
+ */
 export function buildMain(legends: string[], ctx: BuildContext): Record<string, number> | null {
   if (!isLegalTrio(legends)) return null;
+  const shape = ctx.shape ?? poolShape(ctx.pool);
   const cards = eligibleCards(legends);
   const pop = poolPopularity(legends, ctx.pool);
   const maxPop = Math.max(0, ...cards.map((c) => pop[c.slug] ?? 0));
   const ranked = cards.map((c) => ({ c, s: cardScore(c, pop[c.slug] ?? 0, maxPop, ctx) })).sort((a, b) => b.s - a.s);
+  const unitsRanked = ranked.filter((x) => x.c.type === "unit");
+  const restRanked = ranked.filter((x) => x.c.type !== "unit");
   const main: Record<string, number> = {};
-  let size = 0, units = 0, heavy = 0, cheap = 0;
-  const SIZE = 40, MAX_UNITS = 24, MAX_HEAVY = 9;
+  let size = 0, units = 0, heavy = 0;
+  const SIZE = 40;
   const add = (c: Card, n: number) => {
     main[c.slug] = (main[c.slug] ?? 0) + n;
     size += n;
     if (c.type === "unit") units += n;
     if ((c.cost ?? 0) >= 5) heavy += n;
-    if ((c.cost ?? 0) <= 2) cheap += n;
   };
-  // Pass 1: the best cards within the shape limits; pass 2: anything left (small pools).
-  for (const pass of [1, 2]) {
-    for (const { c } of ranked) {
-      if (size >= SIZE) break;
+  const fill = (list: { c: Card }[], until: () => boolean, heavyCap: boolean) => {
+    for (const { c } of list) {
+      if (until()) return;
       const room = Math.min(3 - (main[c.slug] ?? 0), SIZE - size);
       if (room <= 0) continue;
-      if (pass === 1) {
-        if (c.type === "unit" && units + room > MAX_UNITS) continue;
-        if (c.type !== "unit" && SIZE - size - room < Math.max(0, 15 - units)) continue;
-        if ((c.cost ?? 0) >= 5 && heavy + room > MAX_HEAVY) continue;
-      }
-      add(c, room);
+      const fit = c.type === "unit" ? Math.min(room, Math.max(0, target - units)) || room : room;
+      if (heavyCap && (c.cost ?? 0) >= 5 && heavy + fit > shape.maxHeavy) continue;
+      add(c, c.type === "unit" && units < target ? Math.min(fit, target - units) : fit);
     }
+  };
+  const target = Math.round((shape.minUnits + shape.maxUnits) / 2);
+  fill(unitsRanked, () => units >= target || size >= SIZE, true);
+  fill(restRanked, () => size >= SIZE, true);
+  // Small colour pools: more Units up to the top of the range, then anything legal.
+  const upTo = (n: number) => () => size >= SIZE || units >= n;
+  for (const { c } of unitsRanked) {
+    if (upTo(shape.maxUnits)()) break;
+    const room = Math.min(3 - (main[c.slug] ?? 0), SIZE - size, shape.maxUnits - units);
+    if (room > 0 && !((c.cost ?? 0) >= 5 && heavy + room > shape.maxHeavy)) add(c, room);
   }
-  void cheap;
+  fill(restRanked, () => size >= SIZE, false);
+  for (const { c } of unitsRanked) {
+    if (size >= SIZE) break;
+    const room = Math.min(3 - (main[c.slug] ?? 0), SIZE - size);
+    if (room > 0) add(c, room);
+  }
   return size === SIZE ? main : null;
 }
 
@@ -169,9 +243,11 @@ export function mutateMain(deck: Deck, ctx: BuildContext): Record<string, number
   const out = cutScores[0]?.s;
   const outCard = out ? catalog.bySlug(out) : undefined;
   if (!out || !outCard) return null;
+  // A Unit for a Unit, a Gear or Program for a Gear or Program: the deck keeps its shape.
+  const isUnit = outCard.type === "unit";
   const options = cards
-    .filter((c) => !deck.main[c.slug] && c.slug !== out)
-    .map((c) => ({ c, s: cardScore(c, pop[c.slug] ?? 0, maxPop, { ...ctx, temperature: 0.3 }) + (c.type === outCard.type ? 0.1 : 0) }))
+    .filter((c) => !deck.main[c.slug] && c.slug !== out && (c.type === "unit") === isUnit)
+    .map((c) => ({ c, s: cardScore(c, pop[c.slug] ?? 0, maxPop, { ...ctx, temperature: 0.3 }) }))
     .sort((a, b) => b.s - a.s)
     .slice(0, 6);
   const pick = options[Math.floor(rng() * options.length)]?.c;
@@ -180,16 +256,18 @@ export function mutateMain(deck: Deck, ctx: BuildContext): Record<string, number
   const main = { ...deck.main };
   delete main[out];
   main[pick.slug] = Math.min(3, n);
-  // A single copy can not take three slots: the rest goes to the best card already in the deck.
+  // A single copy can not take three slots: the rest goes to cards of the same kind already in the deck.
   let missing = n - main[pick.slug]!;
   for (const s of inDeck) {
     if (missing <= 0) break;
-    if (s === out) continue;
+    if (s === out || (catalog.bySlug(s)?.type === "unit") !== isUnit) continue;
     const room = 3 - (main[s] ?? 0);
     const k = Math.min(room, missing);
     if (k > 0) (main[s] = (main[s] ?? 0) + k), (missing -= k);
   }
-  return missing === 0 ? main : null;
+  if (missing !== 0) return null;
+  const shape = ctx.shape ?? poolShape(ctx.pool);
+  return shapeDistance(main, shape) <= shapeDistance(deck.main, shape) ? main : null;
 }
 
 /** New Legends + Main Deck, checked by the official rules (null when nothing legal came out). */
@@ -211,12 +289,13 @@ export interface LabSeedRequest {
 /** Generation 0: the pool's own Legend trios rebuilt by the Lab, then random trios. */
 export function labSeed(req: LabSeedRequest): Deck[] {
   const rng = seededRandom(req.seed);
+  const shape = poolShape(req.pool);
   const keep = req.keep ?? [];
   const out: Deck[] = [];
   const seen = new Set<string>();
   const push = (legends: string[], temperature: number) => {
     if (!legends.length || !keep.every((k) => legends.includes(k))) return;
-    const d = newDeck(legends, { pool: req.pool, values: req.values, rng, temperature }, `${req.seed}-${out.length}`);
+    const d = newDeck(legends, { pool: req.pool, shape, values: req.values, rng, temperature }, `${req.seed}-${out.length}`);
     if (!d) return;
     const key = JSON.stringify([trioKey(d.legends), Object.entries(d.main).sort()]);
     if (seen.has(key)) return;
@@ -242,7 +321,7 @@ export function labBreed(req: LabBreedRequest): Deck[] {
   const rng = seededRandom(req.seed);
   const keep = req.keep ?? [];
   const out: Deck[] = [];
-  const ctx = { pool: req.pool, values: req.values, rng };
+  const ctx = { pool: req.pool, shape: poolShape(req.pool), values: req.values, rng };
   for (let tries = 0; out.length < req.count && tries < req.count * 20 && req.parents.length; tries++) {
     const parent = req.parents[Math.min(req.parents.length - 1, Math.floor(rng() * rng() * req.parents.length))]!;
     const r = rng();

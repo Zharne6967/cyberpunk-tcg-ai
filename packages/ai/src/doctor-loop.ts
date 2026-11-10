@@ -36,9 +36,11 @@ export interface DoctorOptions {
   z: number;
   /** Fresh games for the final confirmation, original vs improved. */
   confirm: number;
+  /** Cards never cut (your choice; the deck's core is kept anyway). */
+  protect: string[];
 }
 
-export const DEFAULT_DOCTOR: DoctorOptions = { stages: [64, 128, 256], keep: [6, 2, 2], check: 400, rounds: 2, cuts: 4, adds: 6, minGain: 0.03, z: 1.28, confirm: 400 };
+export const DEFAULT_DOCTOR: DoctorOptions = { stages: [64, 128, 256], keep: [6, 2, 2], check: 400, rounds: 2, cuts: 4, adds: 6, minGain: 0.03, z: 1.28, confirm: 400, protect: [] };
 
 export interface DoctorSwap {
   out: string;
@@ -77,6 +79,8 @@ export interface DoctorReport<D extends DoctorDeck = DoctorDeck> {
   /** Fresh games: original vs improved (same opponents and seeds). */
   confirm: Confirmation;
   changes: { out: string; in: string; copies: number }[];
+  /** Cards that were never cut: the deck's core (share of similar decks playing them) and yours (share null). */
+  kept: { slug: string; share: number | null }[];
   /** Games played in all. */
   games: number;
   ms: number;
@@ -91,7 +95,8 @@ export type ProposeSwaps<D extends DoctorDeck = DoctorDeck, O extends DoctorOutc
   outcomes: (O | null)[],
   cuts: number,
   adds: number,
-) => Promise<{ out: string; in: string; copies: number; deck: D }[]>;
+  keep: string[],
+) => Promise<{ variants: { out: string; in: string; copies: number; deck: D }[]; kept: { slug: string; share: number | null }[] }>;
 
 function interval(wins: number, n: number): [number, number] {
   if (n === 0) return [0, 1];
@@ -169,6 +174,7 @@ export async function doctorLoop<D extends DoctorDeck, O extends DoctorOutcome>(
   const stagePer = opts.stages.map((s) => perOpponent(s, opponents.length));
   const lastStage = stagePer[stagePer.length - 1]! * opponents.length;
   let current = deck;
+  let kept: DoctorReport<D>["kept"] = [];
   let total = doctorBudget(opts, opponents.length, opts.cuts * opts.adds);
   let games = 0;
   /** One gauntlet, counted for the progress bar. */
@@ -189,7 +195,9 @@ export async function doctorLoop<D extends DoctorDeck, O extends DoctorOutcome>(
       prev = per;
     }
     const baseAll = baseRuns.flat();
-    const variants = await propose(current, opponents, baseAll, opts.cuts, opts.adds);
+    const proposal = await propose(current, opponents, baseAll, opts.cuts, opts.adds, opts.protect);
+    const variants = proposal.variants;
+    if (r === 0) kept = proposal.kept;
     // The estimate assumed cuts × adds swaps: correct it with the real number.
     total = games - lastStage + doctorBudget({ ...opts, rounds: opts.rounds - r }, opponents.length, variants.length);
     type Entry = { v: (typeof variants)[number]; runs: (O | null)[][] };
@@ -241,5 +249,5 @@ export async function doctorLoop<D extends DoctorDeck, O extends DoctorOutcome>(
     return out;
   };
   const confirm = await confirmDecks(deck, current, opponents, counted, confirmPer, "greedy");
-  return { original: deck, improved: current, opponents, rounds, confirm, changes, games, ms: performance.now() - t0 };
+  return { original: deck, improved: current, opponents, rounds, confirm, changes, kept, games, ms: performance.now() - t0 };
 }

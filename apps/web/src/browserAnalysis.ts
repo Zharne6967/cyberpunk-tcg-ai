@@ -85,7 +85,7 @@ export async function analyzeInBrowser(
 // ---- Deck Doctor: card swaps tested in simulations on this device (same workers for the whole run).
 
 type Outcome = { winner: "A" | "B" | "draw"; cardsA: { played: string[] } };
-type DoctorMsg = { type: string; job?: number; total?: number; index?: number; outcome?: Outcome | null; variants?: { out: string; in: string; copies: number; deck: DeckData }[]; opponents?: DeckData[]; decks?: DeckData[]; message?: string };
+type DoctorMsg = { type: string; job?: number; total?: number; index?: number; outcome?: Outcome | null; proposal?: { variants: { out: string; in: string; copies: number; deck: DeckData }[]; kept: { slug: string; share: number | null }[] }; opponents?: DeckData[]; decks?: DeckData[]; message?: string };
 
 /** Workers kept for a whole job: single answers (`ask`) and gauntlets split over all of them (`play`). */
 function workerPool(signal: AbortSignal) {
@@ -173,7 +173,7 @@ export async function doctorInBrowser(
       deck,
       opponents,
       (d, opp, per, seed, bot) => play(d, opp, per, seed, bot),
-      (d, opp, outcomes, cuts, adds) => ask({ type: "propose", deck: d, opponents: opp, outcomes, cuts, adds }, (m) => (m.type === "proposed" ? m.variants : undefined)),
+      (d, opp, outcomes, cuts, adds, keep) => ask({ type: "propose", deck: d, opponents: opp, outcomes, cuts, adds, keep }, (m) => (m.type === "proposed" ? m.proposal : undefined)),
       options,
       onProgress,
     );

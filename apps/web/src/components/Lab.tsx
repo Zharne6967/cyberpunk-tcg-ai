@@ -18,6 +18,24 @@ const TYPE_LABEL: Record<string, string> = { unit: "Units", gear: "Gear", progra
 
 type State = { status: "running"; text: string; done: number; total: number } | { status: "done"; report: LabReport<DeckData> };
 
+/** Units, sellable cards (every Gear and Program, almost no Unit) and 5+ cost cards of a deck. */
+function DeckShapeLine({ db, deck }: { db: CardDb; deck: DeckData }) {
+  let size = 0, units = 0, sell = 0, heavy = 0;
+  for (const [slug, n] of Object.entries(deck.main)) {
+    const c = db.bySlug.get(slug);
+    if (!c) continue;
+    size += n;
+    if (c.type === "unit") units += n;
+    if (c.sellTag) sell += n;
+    if ((c.cost ?? 0) >= 5) heavy += n;
+  }
+  return (
+    <div className="muted small">
+      {size} cards · {units} Units · {size - units} Gear and Programs · {size ? Math.round((sell / size) * 100) : 0}% sellable · {heavy} costing 5+
+    </div>
+  );
+}
+
 function DeckList({ db, deck }: { db: CardDb; deck: DeckData }) {
   const groups = TYPE_ORDER.map((t) => ({
     t,
@@ -159,6 +177,7 @@ function LabDeck({ db, entry, rank, check }: { db: CardDb; entry: LabReport<Deck
         </div>
         <div>
           <h3>Main Deck</h3>
+          <DeckShapeLine db={db} deck={entry.deck} />
           <DeckList db={db} deck={entry.deck} />
         </div>
       </div>

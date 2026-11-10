@@ -95,3 +95,21 @@ describe("deck lab: search loop", () => {
     expect(v.b!).toBeLessThan(0);
   });
 });
+
+describe("deck lab: decks built the way players build them", () => {
+  it("new and bred decks keep the meta shape: about 15 Units, mostly sellable Gear and Programs", async () => {
+    const { poolShape, shapeOf } = await import("./lab.ts");
+    const shape = poolShape(pool);
+    expect(shape.minUnits).toBeGreaterThanOrEqual(11);
+    expect(shape.maxUnits).toBeLessThanOrEqual(19);
+    const seeded = labSeed({ pool, count: 20, seed: "shape" });
+    const kids = labBreed({ parents: seeded.slice(0, 6), pool, count: 20, seed: "shape-b" });
+    for (const d of [...seeded, ...kids]) {
+      const x = shapeOf(d.main);
+      expect(x.units).toBeGreaterThanOrEqual(shape.minUnits);
+      expect(x.units).toBeLessThanOrEqual(shape.maxUnits);
+      expect(x.sellable).toBeGreaterThanOrEqual(shape.minSellable);
+      expect(x.heavy).toBeLessThanOrEqual(shape.maxHeavy);
+    }
+  });
+});
