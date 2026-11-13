@@ -75,6 +75,22 @@ tabela „Your cards on the ladder”, *Save as a new deck*, sprawdzenie botami 
 zostaje w CLI (`pnpm lab`); `pnpm ladder` drukuje talie Laba i porady Doctora dla `data/decks`. Odświeżenie danych:
 ręcznie (strony archetypów `/meta/<klucz>?queue=core-bo1&window=30d`), plik JSON jak wyżej.
 
+**Czat „Ask for a deck” w Deck Lab (2026-11-13, prośba gracza: „wpisać czego oczekuję od decku i sam mi go
+stworzy, jak rozmowa”).** Bez modelu językowego (darmowy hosting, działa w przeglądarce): `packages/ai/src/
+deck-request.ts` czyta wiadomość po polsku i po angielsku — kolory („4 czerwone 2 zielone”, „mono yellow”, „GGR”),
+Legendy (pełne nazwy, imiona, nazwiska, polskie końcówki: „z Viktorem”), karty („3 Mantis Blades”), „bez/without/
+nie chcę …” (przeczenie obejmuje listę nazw), „agresywny/aggressive/tani” (niska krzywa, ≤6 kart 5+),
+„kontrolny/late” (wysoka krzywa), „15 jednostek”, „13-15 units”, „60% na sprzedaż”, „więcej/mniej jednostek”,
+„najpopularniejszy”, „nietypowy”, „inny” (kolejny archetyp), „od nowa / new deck”, „pokona/against/lepszy niż X”
+(archetyp, Legenda albo Rogue AI). Słowa w nazwach kart nie liczą się jako życzenia („Take Control” ≠ kontrolny).
+Każda wiadomość zmienia poprzednią prośbę; gdy nic nie pasuje, zdejmuje po kolei liczbę Jednostek, krzywą, karty,
+Legendy, kolory i mówi, co zdjął („Viktor Vektor is Yellow: no room for that in 4 Red / 2 Green”). Budowa:
+`metaBuild(..., opts)` z `include`/`exclude`/`curve`; archetypy, w których listy grają podane Legendy (≥5%), idą
+pierwsze. Odpowiedź: archetyp i dlaczego (win rate / udział), liczby z ladderu dla podanych Legend i kart,
+kształt talii, „Your request: …”, talia z liczbami przy kartach, „Also fits” (przyciski), dla „beat X” —
+**Test against X**: 3 kandydatów gra botami Strong z taliami meta X z puli (4 partie na talię), najlepszy zostaje
+pokazany. Testy: `deck-request.test.ts`.
+
 **Pula meta** = `data/decks/meta-*`, `rogue-ai-*` + talie dodane przez gracza („Meta pool” → *Add to the meta pool*,
 w przeglądarce, `apps/web/src/metaPool.ts`; używa jej też Deck Doctor). Dodane 2026-11-09 z ChoomBattler
 (ranked, Core BO1, 30 dni, Standard lists): Dexter/Padre/V (62.8%), Adam/Saburo/V (58.9%), Adam/Dexter/Padre (64.9%).

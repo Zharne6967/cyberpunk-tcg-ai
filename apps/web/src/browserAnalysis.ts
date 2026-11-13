@@ -311,7 +311,7 @@ export interface MetaBuild {
   archetype: ArchetypeStats;
   deck: DeckData;
   legends: LegendStat[];
-  cards: { slug: string; copies: number; stat: CardStat | null }[];
+  cards: { slug: string; copies: number; stat: CardStat | null; asked?: boolean }[];
 }
 export interface MetaAdvice {
   archetype: ArchetypeStats | null;
@@ -321,21 +321,48 @@ export interface MetaAdvice {
   improved: DeckData;
 }
 
-/** One answer from a short-lived worker (the ladder data lives there with the card catalog). */
+/** Answers from one worker kept for the ladder questions (it keeps the card catalog loaded). */
+let metaWorker: Worker | null = null;
+let metaJob = 0;
+const metaWaiting = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 function askOnce<T>(msg: Record<string, unknown>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const w = new Worker(new URL("../../../packages/ai/src/browser-worker.ts", import.meta.url), { type: "module" });
-    w.onmessage = ({ data }: MessageEvent<{ type: string; result?: unknown; message?: string }>) => {
-      if (data.type === "meta") resolve(data.result as T);
-      else if (data.type === "error") reject(new Error(data.message));
-      else return;
-      w.terminate();
+  if (!metaWorker) {
+    const w = (metaWorker = new Worker(new URL("../../../packages/ai/src/browser-worker.ts", import.meta.url), { type: "module" }));
+    w.onmessage = ({ data }: MessageEvent<{ type: string; job?: number; result?: unknown; message?: string }>) => {
+      const waiting = metaWaiting.get(data.job ?? -1);
+      if (!waiting || (data.type !== "meta" && data.type !== "error")) return;
+      metaWaiting.delete(data.job!);
+      if (data.type === "meta") waiting.resolve(data.result);
+      else waiting.reject(new Error(data.message));
     };
-    w.onerror = (e) => (reject(new Error(e.message || "The worker failed")), w.terminate());
-    w.postMessage({ ...msg, job: 1 });
+    w.onerror = (e) => {
+      for (const waiting of metaWaiting.values()) waiting.reject(new Error(e.message || "The worker failed"));
+      metaWaiting.clear();
+      w.terminate();
+      metaWorker = null;
+    };
+  }
+  const job = ++metaJob;
+  return new Promise<T>((resolve, reject) => {
+    metaWaiting.set(job, { resolve: resolve as (v: unknown) => void, reject });
+    metaWorker!.postMessage({ ...msg, job });
   });
 }
 
 export const metaList = () => askOnce<{ source: string; date: string; archetypes: ArchetypeSummary[] }>({ type: "metaList" });
 export const metaBuilds = (keys?: string[], legends?: string[]) => askOnce<MetaBuild[]>({ type: "metaBuild", keys, legends });
 export const metaAdviceFor = (deck: DeckData, keep: string[] = []) => askOnce<MetaAdvice>({ type: "metaAdvice", deck, keep });
+
+/** The Deck Lab's chat (packages/ai/src/deck-request.ts): the request is passed back with the next message. */
+export type DeckRequestData = Record<string, unknown>;
+export interface DeckAnswer {
+  request: DeckRequestData;
+  understood: string[];
+  summary: string[];
+  reply: string[];
+  build: MetaBuild | null;
+  alternatives: ArchetypeSummary[];
+  beat: { label: string; decks: DeckData[]; candidates: MetaBuild[] } | null;
+}
+export const deckChat = (text: string, previous: DeckRequestData | null, pool: DeckData[], shown: string | null) =>
+  askOnce<DeckAnswer>({ type: "deckChat", text, previous, pool, shown });

@@ -96,6 +96,8 @@ export interface BuiltCard {
   copies: number;
   /** Why: the card's ladder numbers in this archetype (null for a filler card). */
   stat: CardStat | null;
+  /** The player asked for this card. */
+  asked?: boolean;
 }
 export interface MetaBuild {
   archetype: ArchetypeStats;
@@ -104,8 +106,18 @@ export interface MetaBuild {
   cards: BuiltCard[];
 }
 
+/** What a player can ask of a build besides the archetype (the Deck Lab's chat). */
+export interface BuildOptions {
+  /** Cards that must be in the deck (copies: null = the usual number, at least 2). */
+  include?: { slug: string; copies: number | null }[];
+  /** Cards that must not be in the deck. */
+  exclude?: string[];
+  /** "low": cheap cards first and few costing 5+; "high": room for and a bonus on cards costing 5+. */
+  curve?: "low" | "high" | null;
+}
+
 /** The best Legends for an archetype: the colour split it needs, the highest trusted lift among the ones players use. */
-export function bestLegends(a: ArchetypeStats, fixed: string[] = []): string[] | null {
+export function bestLegends(a: ArchetypeStats, fixed: string[] = [], avoid: string[] = []): string[] | null {
   const catalog = getCatalog();
   const need = new Map<string, number>(a.key.match(/\d-[a-z]+/g)!.map((p) => [p.split("-")[1]!, Number(p.split("-")[0]) / 2]));
   const chosen = [...fixed];
@@ -113,7 +125,9 @@ export function bestLegends(a: ArchetypeStats, fixed: string[] = []): string[] |
     const c = catalog.bySlug(slug)?.color;
     if (c && need.has(c)) need.set(c, need.get(c)! - 1);
   }
-  const ranked = a.legends.filter((l) => l.popularity >= 5 && !chosen.includes(l.slug)).sort((x, y) => trustedLift(y) - trustedLift(x) || y.popularity - x.popularity);
+  const ranked = a.legends
+    .filter((l) => l.popularity >= 5 && !chosen.includes(l.slug) && !avoid.includes(l.slug))
+    .sort((x, y) => trustedLift(y) - trustedLift(x) || y.popularity - x.popularity);
   for (const l of ranked) {
     const color = catalog.bySlug(l.slug)?.color;
     if (!color || !(need.get(color)! > 0)) continue;
@@ -127,26 +141,39 @@ export function bestLegends(a: ArchetypeStats, fixed: string[] = []): string[] |
   return chosen.length === 3 && isLegalTrio(chosen) && archetypeKey(chosen) === a.key ? chosen : null;
 }
 
+/** Can these Legends play the card (its colour and RAM)? */
+export function legendsFit(legends: string[], slug: string): boolean {
+  const c = getCatalog().bySlug(slug);
+  const budget = legendRamBudget({ id: "", name: "", legends, main: {} });
+  return !!c && c.type !== "legend" && budget[c.color] !== undefined && (c.ram ?? 0) <= budget[c.color]!;
+}
+
+const hashOf = (s: string) => {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+};
+
 /**
  * A 40-card deck from the ladder: the archetype's cards by value (popularity and trusted lift), each at
  * its usual number of copies, within the meta shape (Units, 5+ cards); cards with a clearly negative lift
- * only when nothing better fits.
+ * only when nothing better fits. `opts` adds what the player asked for (cards in or out, the curve).
  */
-export function metaBuild(a: ArchetypeStats, legends?: string[], shape: DeckShape = META_SHAPE): MetaBuild | null {
+export function metaBuild(a: ArchetypeStats, legends?: string[], shape: DeckShape = META_SHAPE, opts: BuildOptions = {}): MetaBuild | null {
   const catalog = getCatalog();
   const trio = legends ?? bestLegends(a);
   if (!trio || !isLegalTrio(trio)) return null;
-  const budget = legendRamBudget({ id: "", name: "", legends: trio, main: {} });
-  const fits = (slug: string) => {
-    const c = catalog.bySlug(slug);
-    return !!c && c.type !== "legend" && budget[c.color] !== undefined && (c.ram ?? 0) <= budget[c.color]!;
-  };
-  const ranked = a.cards.filter((s) => fits(s.slug)).sort((x, y) => cardValue(y) - cardValue(x));
+  const exclude = new Set(opts.exclude ?? []);
+  const fits = (slug: string) => !exclude.has(slug) && legendsFit(trio, slug);
+  const cost = (slug: string) => catalog.bySlug(slug)?.cost ?? 0;
+  const value = (s: CardStat) =>
+    cardValue(s) + (opts.curve === "low" ? 0.04 * (3 - cost(s.slug)) : opts.curve === "high" ? 0.05 * Math.max(0, cost(s.slug) - 4) : 0);
+  const ranked = a.cards.filter((s) => fits(s.slug)).sort((x, y) => value(y) - value(x));
   const main: Record<string, number> = {};
   const why = new Map<string, CardStat | null>();
   let size = 0;
   const units = () => Object.entries(main).reduce((n, [s, k]) => n + (catalog.bySlug(s)?.type === "unit" ? k : 0), 0);
-  const heavy = () => Object.entries(main).reduce((n, [s, k]) => n + ((catalog.bySlug(s)?.cost ?? 0) >= 5 ? k : 0), 0);
+  const heavy = () => Object.entries(main).reduce((n, [s, k]) => n + (cost(s) >= 5 ? k : 0), 0);
   const add = (slug: string, n: number, stat: CardStat | null) => {
     const room = Math.min(n, 3 - (main[slug] ?? 0), 40 - size);
     if (room <= 0) return;
@@ -161,10 +188,18 @@ export function metaBuild(a: ArchetypeStats, legends?: string[], shape: DeckShap
     if ((c.cost ?? 0) >= 5 && heavy() + n > shape.maxHeavy) return false;
     return true;
   };
+  // 0. What the player asked for, whatever its numbers.
+  const asked = new Set<string>();
+  for (const inc of opts.include ?? []) {
+    if (!legendsFit(trio, inc.slug)) continue;
+    const stat = a.cards.find((s) => s.slug === inc.slug) ?? null;
+    add(inc.slug, inc.copies ?? Math.max(2, Math.round(stat?.copies ?? 3)), stat);
+    asked.add(inc.slug);
+  }
   // 1. Cards that do not drag lists down, at their usual copies.
   for (const s of ranked) {
     if (size >= 40) break;
-    if (trustedLift(s) < -1) continue;
+    if (trustedLift(s) < -1 || main[s.slug]) continue;
     const n = Math.max(1, Math.min(3, Math.round(s.copies)));
     if (ok(s.slug, n)) add(s.slug, n, s);
   }
@@ -173,16 +208,17 @@ export function metaBuild(a: ArchetypeStats, legends?: string[], shape: DeckShap
   const put = (slug: string, want: number, stat: CardStat | null) => {
     for (let n = Math.min(want, 3 - (main[slug] ?? 0), 40 - size); n > 0; n--) if (ok(slug, n)) return add(slug, n, stat);
   };
-  for (const s of ranked) if (size < 40 && main[s.slug] && trustedLift(s) >= -1) put(s.slug, 3, s);
-  for (const s of ranked) if (size < 40 && trustedLift(s) >= -1) put(s.slug, Math.max(1, Math.round(s.copies)), s);
-  for (const s of ranked) if (size < 40) put(s.slug, Math.max(1, Math.round(s.copies)), s);
-  for (const c of catalog.cards) if (size < 40 && fits(c.slug)) put(c.slug, 2, null);
+  for (const s of ranked) if (size < 40 && main[s.slug] && !asked.has(s.slug) && trustedLift(s) >= -1) put(s.slug, 3, s);
+  for (const s of ranked) if (size < 40 && !main[s.slug] && trustedLift(s) >= -1) put(s.slug, Math.max(1, Math.round(s.copies)), s);
+  for (const s of ranked) if (size < 40 && !main[s.slug]) put(s.slug, Math.max(1, Math.round(s.copies)), s);
+  for (const c of catalog.cards) if (size < 40 && fits(c.slug) && !main[c.slug]) put(c.slug, 2, null);
   if (size !== 40) return null;
-  const deck: Deck = { id: `meta-build-${a.key}-${trio.map((s) => s.split("-")[0]).join("-")}`, name: trioName(trio), legends: trio, main };
+  const key = JSON.stringify([trio, Object.entries(main).sort()]);
+  const deck: Deck = { id: `meta-build-${a.key}-${hashOf(key)}`, name: trioName(trio), legends: trio, main };
   if (!isDeckLegal(deck)) return null;
   const legendStats = trio.map((s) => a.legends.find((l) => l.slug === s)).filter((l): l is LegendStat => !!l);
   const cards = Object.entries(main)
-    .map(([slug, copies]) => ({ slug, copies, stat: why.get(slug) ?? null }))
+    .map(([slug, copies]) => ({ slug, copies, stat: why.get(slug) ?? null, ...(asked.has(slug) ? { asked: true } : {}) }))
     .sort((x, y) => (y.stat ? cardValue(y.stat) : -1) - (x.stat ? cardValue(x.stat) : -1));
   return { archetype: a, deck, legends: legendStats, cards };
 }

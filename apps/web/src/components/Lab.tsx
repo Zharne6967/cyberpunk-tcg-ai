@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DeckData, DeckSummary } from "@cpai/core/protocol";
 import { api, loadCardDb, type CardDb } from "../api.ts";
-import { checkInBrowser, metaBuilds, metaList, type ArchetypeSummary, type Checked, type MetaBuild, type Matchup } from "../browserAnalysis.ts";
+import { checkInBrowser, deckChat, metaBuilds, metaList, type ArchetypeSummary, type Checked, type DeckAnswer, type MetaBuild, type Matchup } from "../browserAnalysis.ts";
 import { addMetaDeck, addedMetaDecks, metaPool, removeMetaDeck } from "../metaPool.ts";
 import { LADDER, Rate, Thumb } from "./Analysis.tsx";
 
@@ -58,7 +58,7 @@ function LadderList({ db, build }: { db: CardDb; build: MetaBuild }) {
                         in {c.stat.popularity}% · <span className={liftClass(c.stat.lift)}>{lift(c.stat.lift)}</span>
                       </>
                     ) : (
-                      <span className="muted"> to fill the deck</span>
+                      <span className="muted">{c.asked ? " asked for" : " to fill the deck"}</span>
                     )}
                   </span>
                 </span>
@@ -110,7 +110,7 @@ function LadderDeck({
 }: {
   db: CardDb;
   build: MetaBuild;
-  rank: number;
+  rank?: number;
   check?: Check;
   busy: boolean;
   onCheck: () => void;
@@ -140,7 +140,8 @@ function LadderDeck({
         </div>
         <div>
           <h2>
-            #{rank} {a.name}: {build.deck.name}
+            {rank ? `#${rank} ` : ""}
+            {a.name}: {build.deck.name}
           </h2>
           <div className="lab-verdict">
             Ladder: <b>{a.winRate}%</b> win rate over {a.games} games · {a.share}% of the field
@@ -308,6 +309,239 @@ function PoolEditor({ db, builtIn, onChange }: { db: CardDb; builtIn: DeckData[]
   );
 }
 
+const CHAT_KEY = "cpai.lab.chat";
+const EXAMPLES = [
+  "The best deck with Padre",
+  "Aggressive red deck with 3 Mantis Blades, without Satori",
+  "Most played deck with 60% sellable cards",
+  "A deck that beats 4 Yellow / 2 Red",
+  "Something less played with Judy Álvarez",
+];
+
+type ChatMsg =
+  | { from: "you"; text: string }
+  | { from: "bot"; answer: DeckAnswer; shown: MetaBuild | null; test?: { done: number; total: number } | { build: MetaBuild; check: Checked }[] };
+
+function readChat(): ChatMsg[] {
+  try {
+    const raw = sessionStorage.getItem(CHAT_KEY);
+    return raw ? (JSON.parse(raw) as ChatMsg[]).map((m) => (m.from === "bot" && m.test && !Array.isArray(m.test) ? { ...m, test: undefined } : m)) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Write what you want of a deck; the bot builds it from the ladder data and explains it. */
+function DeckChat({
+  db,
+  pool,
+  checks,
+  busy,
+  onCheck,
+  onBusy,
+}: {
+  db: CardDb;
+  pool: DeckData[];
+  checks: Record<string, Check>;
+  busy: boolean;
+  onCheck: (b: MetaBuild) => void;
+  onBusy: (b: boolean) => void;
+}) {
+  const [log, setLog] = useState<ChatMsg[]>(readChat);
+  const [text, setText] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const [error, setError] = useState<string>();
+  const abort = useRef<AbortController | null>(null);
+  const newest = useRef<HTMLDivElement | null>(null);
+  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(CHAT_KEY, JSON.stringify(log.slice(-12)));
+    } catch {
+      /* the chat still works without storage */
+    }
+  }, [log]);
+  const lastBot = [...log].reverse().find((m): m is Extract<ChatMsg, { from: "bot" }> => m.from === "bot");
+
+  const send = async (t: string) => {
+    const msg = t.trim();
+    if (!msg || thinking) return;
+    setText("");
+    setError(undefined);
+    setThinking(true);
+    setLog((l) => [...l, { from: "you", text: msg }]);
+    try {
+      const answer = await deckChat(msg, lastBot?.answer.request ?? null, pool, lastBot?.shown?.archetype.key ?? null);
+      setLog((l) => [...l, { from: "bot", answer, shown: answer.build }]);
+      requestAnimationFrame(() => newest.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    } finally {
+      setThinking(false);
+    }
+  };
+  const reset = () => {
+    abort.current?.abort();
+    setLog([]);
+    setError(undefined);
+  };
+  const patch = (index: number, p: Partial<Extract<ChatMsg, { from: "bot" }>>) =>
+    setLog((l) => l.map((x, i) => (i === index && x.from === "bot" ? { ...x, ...p } : x)));
+  const test = async (index: number) => {
+    const m = log[index];
+    if (m?.from !== "bot" || !m.answer.beat) return;
+    const { candidates, decks } = m.answer.beat;
+    abort.current?.abort();
+    const ctl = (abort.current = new AbortController());
+    onBusy(true);
+    patch(index, { test: { done: 0, total: 0 } });
+    try {
+      const res = await checkInBrowser(
+        candidates.map((b) => b.deck),
+        decks,
+        CHECK_PER,
+        "ismcts-sim",
+        (done, total) => !ctl.signal.aborted && patch(index, { test: { done, total } }),
+        ctl.signal,
+      );
+      const results = candidates
+        .map((build) => ({ build, check: res.find((r) => r.deckId === build.deck.id)! }))
+        .filter((r) => r.check)
+        .sort((x, y) => y.check.rate - x.check.rate);
+      patch(index, { test: results, shown: results[0]?.build ?? m.shown });
+    } catch (e) {
+      patch(index, { test: undefined });
+      if (!ctl.signal.aborted) setError(String((e as Error).message ?? e));
+    } finally {
+      onBusy(false);
+    }
+  };
+  const stop = (index: number) => {
+    abort.current?.abort();
+    patch(index, { test: undefined });
+    onBusy(false);
+  };
+
+  return (
+    <section className="panel lab-chat">
+      <h2>Ask for a deck</h2>
+      <p className="muted small">
+        Write what you want: colours, Legends, cards to play or to leave out, an aggressive or a control deck, how many Units or sellable cards, or which deck it should
+        beat. Every message changes the last deck; "New deck" starts over.
+      </p>
+      {log.map((m, i) =>
+        m.from === "you" ? (
+          <div key={i} className="chat-you">
+            {m.text}
+          </div>
+        ) : (
+          <div key={i} ref={i === log.length - 1 ? newest : undefined} className="chat-bot">
+            <div className="chat-reply">
+              {m.answer.reply.map((r, k) => (
+                <p key={k} className={k === 0 ? "chat-head" : ""}>
+                  {r}
+                </p>
+              ))}
+              {!m.answer.understood.length && i > 1 && (
+                <p className="muted small">Nothing new read from this message: name colours, Legends or cards, or write "without …", "aggressive", "15 Units".</p>
+              )}
+            </div>
+            {m.answer.summary.length > 0 && <div className="small muted">Your request: {m.answer.summary.join(" · ")}</div>}
+            {m.answer.beat && m.answer.beat.decks.length > 0 && (
+              <div className="chat-test">
+                {Array.isArray(m.test) ? (
+                  <>
+                    <div className="small">
+                      Strong bots against {m.answer.beat.label} ({m.answer.beat.decks.map((d) => d.name).join("; ")}):
+                    </div>
+                    <table className="an-table">
+                      <tbody>
+                        {m.test.map((r) => (
+                          <tr key={r.build.deck.id}>
+                            <td className="small">
+                              {r.build.archetype.name}: {r.build.deck.name}
+                            </td>
+                            <td>
+                              <Rate r={r.check} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="muted small">
+                      The deck below is the best of them. {CHECK_PER} games against each deck: a rough result.
+                    </div>
+                  </>
+                ) : m.test ? (
+                  <span className="an-progress">
+                    <span className="an-bar wide">
+                      <span style={{ width: m.test.total ? pct(m.test.done / m.test.total) : "0%" }} />
+                    </span>
+                    <span className="small muted">
+                      Strong bots: {m.test.done}/{m.test.total || "…"} games
+                    </span>
+                    <button className="btn small" onClick={() => stop(i)}>
+                      Stop
+                    </button>
+                  </span>
+                ) : (
+                  <button className="btn small" disabled={busy} onClick={() => void test(i)}>
+                    Test against {m.answer.beat.label}
+                  </button>
+                )}
+              </div>
+            )}
+            {m.shown && <LadderDeck db={db} build={m.shown} check={checks[m.shown.deck.id]} busy={busy} onCheck={() => onCheck(m.shown!)} />}
+            {m.answer.alternatives.length > 0 && (
+              <div className="chat-alts small">
+                <span className="muted">Also fits:</span>
+                {m.answer.alternatives.map((a) => (
+                  <button key={a.key} className="chip" disabled={thinking} onClick={() => void send(a.name)}>
+                    {a.name} · {a.winRate}%
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ),
+      )}
+      {thinking && <div className="chat-bot muted">Building…</div>}
+      {error && <div className="banner error">{error}</div>}
+      {!log.length && (
+        <div className="chat-examples">
+          {EXAMPLES.map((e) => (
+            <button key={e} className="chip" onClick={() => void send(e)}>
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="chat-input">
+        <textarea
+          rows={2}
+          placeholder="Describe the deck you want…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void send(text);
+            }
+          }}
+        />
+        <button className="btn primary" disabled={!text.trim() || thinking} onClick={() => void send(text)}>
+          Build
+        </button>
+        {log.length > 0 && (
+          <button className="btn" onClick={reset}>
+            New deck
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function Lab() {
   const [db, setDb] = useState<CardDb>();
   const [builtIn, setBuiltIn] = useState<DeckData[]>([]);
@@ -318,6 +552,7 @@ export function Lab() {
   const [order, setOrder] = useState<"winRate" | "games">("winRate");
   const [error, setError] = useState<string>();
   const [checks, setChecks] = useState<Record<string, Check>>({});
+  const [testing, setTesting] = useState(false);
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => {
@@ -350,7 +585,7 @@ export function Lab() {
     () => [...(builds ?? [])].sort((x, y) => (order === "winRate" ? y.archetype.winRate - x.archetype.winRate : y.archetype.games - x.archetype.games)),
     [builds, order],
   );
-  const running = Object.values(checks).some((c) => c.status === "running");
+  const running = testing || Object.values(checks).some((c) => c.status === "running");
 
   const runCheck = async (build: MetaBuild) => {
     abort.current?.abort();
@@ -400,7 +635,9 @@ export function Lab() {
         </span>
       </header>
       {error && <div className="banner error">{error}</div>}
+      <DeckChat db={db} pool={pool} checks={checks} busy={running} onCheck={(b) => void runCheck(b)} onBusy={setTesting} />
       <section className="panel an-input">
+        <h2 className="lab-h2">The best deck of every archetype</h2>
         <p className="small">
           The best deck for every colour archetype, built from real games: the Legends and cards that the winning lists play, each at its usual number of copies, with
           13–17 Units like the meta lists.

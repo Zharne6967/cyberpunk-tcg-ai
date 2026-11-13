@@ -610,3 +610,14 @@ a { color: var(--cyan); }
 .lab-stat .down { color: #ff6b6b; }
 .lab-index { margin-top: 6px; }
 .lab-index td { padding: 3px 8px 3px 0; vertical-align: middle; }
+.lab-chat { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.lab-chat h2, .lab-h2 { margin: 0; font-size: 18px; }
+.chat-you { align-self: flex-end; max-width: 80%; background: #1b1b24; border: 1px solid var(--line); border-radius: 10px 10px 2px 10px; padding: 8px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-bot { display: flex; flex-direction: column; gap: 8px; border-left: 3px solid var(--cyan); padding-left: 10px; min-width: 0; }
+.chat-bot .lab-deck { margin-bottom: 0; }
+.chat-reply p { margin: 0 0 3px; }
+.chat-head { font-weight: 700; color: var(--yellow); }
+.chat-examples, .chat-alts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chat-input { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.chat-input textarea { flex: 1 1 260px; min-height: 46px; resize: vertical; background: #101014; color: inherit; border: 1px solid var(--line); border-radius: 4px; padding: 8px; font: inherit; }
+.chat-test { display: flex; flex-direction: column; gap: 4px; }
