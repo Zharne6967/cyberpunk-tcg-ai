@@ -7,10 +7,24 @@ import { convertSimSnapshot } from "../../packages/ai/src/external/ctcg-sim.ts";
 
 declare const chrome: any;
 
-chrome.runtime.onInstalled.addListener(() => {
+const SITE = ["https://cyberpunk-tcg-sim.online/*", "https://*.cyberpunk-tcg-sim.online/*"];
+
+chrome.runtime.onInstalled.addListener(async (details: { reason?: string }) => {
   chrome.storage.local.get({ enabled: null }).then((v: { enabled: boolean | null }) => {
     if (v.enabled === null) chrome.storage.local.set({ enabled: true });
   });
+  // Game tabs that were already open: the coach starts in them now (no reload needed after installing or updating).
+  if (details.reason !== "install" && details.reason !== "update") return;
+  try {
+    const tabs: { id?: number }[] = await chrome.tabs.query({ url: SITE });
+    for (const t of tabs) {
+      if (t.id === undefined) continue;
+      await chrome.scripting.executeScript({ target: { tabId: t.id }, files: ["page.js"], world: "MAIN" }).catch(() => {});
+      await chrome.scripting.executeScript({ target: { tabId: t.id }, files: ["content.js"] }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("[coach] could not start in open tabs", err);
+  }
 });
 
 let n = 0;

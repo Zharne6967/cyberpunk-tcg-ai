@@ -48,11 +48,17 @@ let expanded = false;
 let details = false;
 let pos = { x: 12, y: 12 };
 let snapshot: SimSnapshot | null = null;
-/** The site's game state was found (false: the site changed and the coach cannot read it). */
+/** The site's app object was found (null: no word from the page yet). */
 let appFound: boolean | null = null;
+/** Why the game could not be read (an error inside the page script), and the page's address. */
+let readError: string | null = null;
+let pagePath = location.pathname;
 let view: { kind: "hidden" } | { kind: "paused" | "waiting" | "thinking" | "note"; text: string } | { kind: "advice"; advice: Advice } = { kind: "hidden" };
 
+// A copy left from an older version of the extension (before it was updated) goes away.
+document.querySelectorAll("[data-cpai-coach]").forEach((old) => old.remove());
 const host = document.createElement("div");
+host.setAttribute("data-cpai-coach", "");
 const root = host.attachShadow({ mode: "closed" });
 root.innerHTML = `<style>${CSS}</style><div class="box" hidden></div>`;
 const box = root.querySelector(".box") as HTMLDivElement;
@@ -179,6 +185,12 @@ async function ask(key: string, snap: SimSnapshot) {
 let timer: ReturnType<typeof setTimeout> | undefined;
 function update() {
   clearTimeout(timer);
+  if (enabled && !snapshot && readError) {
+    wanted = "";
+    view = { kind: "note", text: `Could not read the game: ${readError}` };
+    box.hidden = false;
+    return renderNote();
+  }
   if (!enabled || !snapshot) {
     wanted = "";
     view = { kind: "hidden" };
@@ -208,22 +220,37 @@ function update() {
   timer = setTimeout(() => void ask(key, snap), 250);
 }
 
+/** The note box without a game (render() needs one): the reason the game could not be read. */
+function renderNote() {
+  box.style.left = `${Math.max(0, Math.min(window.innerWidth - 262, pos.x))}px`;
+  box.style.top = `${Math.max(0, Math.min(window.innerHeight - 64, pos.y))}px`;
+  box.innerHTML = `<div class="head"><span class="badge">COACH ON</span></div><div class="line muted" style="white-space: normal">${esc("text" in view ? view.text : "")}</div>`;
+}
+
 window.addEventListener("message", (e) => {
   if (e.source !== window || e.data?.source !== "cpai-coach-page") return;
-  snapshot = e.data.snapshot as SimSnapshot | null;
+  snapshot = (e.data.snapshot ?? null) as SimSnapshot | null;
   appFound = e.data.app !== false;
+  readError = typeof e.data.error === "string" && e.data.error ? e.data.error : null;
+  if (typeof e.data.path === "string") pagePath = e.data.path;
   update();
 });
+// Ask the page script for the current state (it only reports changes; this part may have started later).
+window.postMessage({ source: "cpai-coach-hello" }, location.origin);
 window.addEventListener("resize", () => render());
 
 /** What the extension button shows about this page. */
 chrome.runtime.onMessage.addListener((msg: { type?: string }, _sender: unknown, sendResponse: (r: unknown) => void) => {
   if (msg?.type !== "status") return;
   const text =
-    appFound === false
-      ? "The coach cannot read this page (the site may have changed)"
-      : !snapshot
-        ? "No game on this page yet"
+    appFound === null
+      ? "No word from the page yet: reload it (F5)"
+      : appFound === false
+        ? `The site's game is not on this page (${pagePath}). Open the game and reload the page (F5)`
+        : readError
+          ? `The game is here but could not be read: ${readError}`
+          : !snapshot
+            ? "No game on this page yet"
         : !enabled
           ? "Coach is off"
           : view.kind === "advice"

@@ -14,7 +14,11 @@ odświeżania (↻) przy wtyczce i F5 na stronie gry. Nie trzymaj dwóch wersji 
 ## Gdy nie działa
 Kliknij ikonę wtyczki (na stronie gry). Okienko pokazuje:
 - **This page: …** — co wtyczka widzi na tej stronie: „Showing advice”, „Rival's turn”, „Coach is off”,
-  „No game on this page yet”, „The coach cannot read this page (the site may have changed)”, albo prośbę o F5;
+  „No game on this page yet”, albo dokładny powód, gdy coś nie gra:
+  - „No word from the page yet: reload it (F5)” — skrypt wtyczki jeszcze nie odezwał się ze strony;
+  - „The site's game is not on this page (/…)” — na tej podstronie nie ma gry (np. Deck Builder, Ranked);
+  - „The game is here but could not be read: …” — gra jest, ale coś w jej stanie zatrzymało odczyt; ten sam
+    tekst pokazuje okienko na stronie („Could not read the game: …”) — przyślij go, wtedy wiadomo, co poprawić;
 - **Coach engine: ready** albo „not answering” (wtedy ↻ przy wtyczce w `chrome://extensions`);
 - **Reset box position** — przywraca okienko w lewy górny róg.
 
@@ -32,7 +36,7 @@ Kliknij ikonę wtyczki (na stronie gry). Okienko pokazuje:
   Regulamin strony zabrania pomocy z zewnątrz w meczach, które się liczą („cheats … to manipulate matches,
   rankings … or tournament results”), a gra z obcymi przeciwnikami ma być uczciwa.
 
-## Okienko (wersja 0.1.5)
+## Okienko (wersja 0.1.6)
 - **▶ co zrobić**: przy wyborze na stronie — dokładnie który przycisk kliknąć („Click CALL L1”, „Click TAKE D4 3”,
   „Click MINUS”, „Click KEEP”), pod spodem ten ruch w oficjalnych terminach; w Main Phase — ruch (np. „Play a Card: …”).
 - **dlaczego**: najwyraźniejsza różnica na stole do Twojej następnej tury względem drugiej opcji (np. „+ Rival's Gigs:
@@ -41,7 +45,7 @@ Kliknij ikonę wtyczki (na stronie gry). Okienko pokazuje:
 - Klik w okienko (albo w przycisku wtyczki **Always show details**): plan krok po kroku, wszystkie powody, inne
   opcje z szansami i ich przyciskami, liczba symulacji.
 
-## Co umie (wersja 0.1.5)
+## Co umie (wersja 0.1.6)
 - **React Step**: gdy rywal atakuje — blok ([BLOCKER]), Call a Legend, karta Quick albo PASS; Coach odtwarza atak
   rywala w naszym silniku i liczy każdą odpowiedź.
 - **Kto zaczyna** („Go first” / „Go second”) i **ręka startowa** („Keep” / „Mulligan”): każda opcja z szansą na
@@ -55,6 +59,8 @@ Kliknij ikonę wtyczki (na stronie gry). Okienko pokazuje:
 - Wybory, których nie da się tak odtworzyć (np. efekt karty rywala), nadal tylko opisuje:
   „Your choice: …” albo „Rival is choosing”.
 - Nie czyta jeszcze efektów „do końca tury” z kart programów — wtedy podpowiedź jest przybliżona.
+- 0.1.6: odczyt strony odporny na nietypowe dane (zamiast milczeć, pokazuje powód), po instalacji albo
+  aktualizacji wtyczka sama startuje w otwartych już kartach gry (bez F5), działa też pod adresem z „www.”.
 - 0.1.2: ocena pozycji z self-play (mocniejsze podpowiedzi). 0.1.3: Coach jest włączony, dopóki go nie wyłączysz
   (przycisk i okienko zawsze zgodne), okienko nie może zostać poza ekranem, diagnostyka w przycisku wtyczki.
 - Wtyczka czyta stan gry, który strona trzyma w przeglądarce; jeśli strona zmieni jego format, okienko napisze
