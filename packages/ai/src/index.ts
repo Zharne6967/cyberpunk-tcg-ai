@@ -14,3 +14,4 @@ export * from "./lab.ts";
 export * from "./lab-loop.ts";
 export * from "./meta-stats.ts";
 export * from "./deck-request.ts";
+export * from "./deck-tools.ts";

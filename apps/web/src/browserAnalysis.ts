@@ -366,3 +366,6 @@ export interface DeckAnswer {
 }
 export const deckChat = (text: string, previous: DeckRequestData | null, pool: DeckData[], shown: string | null) =>
   askOnce<DeckAnswer>({ type: "deckChat", text, previous, pool, shown });
+/** One of Claude's tools (packages/ai/src/deck-tools.ts), run next to the card catalog and the ladder data. */
+export const deckTool = (name: string, input: unknown, pool: DeckData[]) =>
+  askOnce<{ content: string; build?: MetaBuild }>({ type: "deckTool", name, input, pool });

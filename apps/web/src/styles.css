@@ -621,3 +621,8 @@ a { color: var(--cyan); }
 .chat-input { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
 .chat-input textarea { flex: 1 1 260px; min-height: 46px; resize: vertical; background: #101014; color: inherit; border: 1px solid var(--line); border-radius: 4px; padding: 8px; font: inherit; }
 .chat-test { display: flex; flex-direction: column; gap: 4px; }
+.chat-claude { display: flex; flex-direction: column; gap: 6px; }
+.chat-key { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chat-key input[type="password"] { flex: 1 1 260px; background: #101014; color: inherit; border: 1px solid var(--line); border-radius: 4px; padding: 7px 8px; font: inherit; }
+.chat-claude-msg { border-left-color: var(--yellow); }
+.chat-text { white-space: pre-wrap; overflow-wrap: anywhere; }

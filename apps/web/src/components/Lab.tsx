@@ -320,7 +320,49 @@ const EXAMPLES = [
 
 type ChatMsg =
   | { from: "you"; text: string }
-  | { from: "bot"; answer: DeckAnswer; shown: MetaBuild | null; test?: { done: number; total: number } | { build: MetaBuild; check: Checked }[] };
+  | { from: "bot"; answer: DeckAnswer; shown: MetaBuild | null; test?: { done: number; total: number } | { build: MetaBuild; check: Checked }[] }
+  | { from: "claude"; text: string; shown: MetaBuild | null; tools: string[]; usd: number; model: string; refused: boolean };
+
+/** Claude in the chat: the player's own API key, sent from this browser straight to Anthropic's API. */
+const CLAUDE_KEY = "cpai.lab.claudeKey";
+const CLAUDE_PREFS = "cpai.lab.claudePrefs";
+const CLAUDE_HISTORY = "cpai.lab.claudeHistory";
+const MODELS = [
+  { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
+  { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
+  { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" },
+] as const;
+type ModelId = (typeof MODELS)[number]["id"];
+const TOOL_LABEL: Record<string, string> = {
+  list_archetypes: "reading the archetypes",
+  archetype_cards: "reading card numbers",
+  search_cards: "searching cards",
+  build_deck: "building a deck",
+  check_deck: "checking a deck",
+};
+
+function storage(kind: "local" | "session"): Storage | null {
+  try {
+    return kind === "local" ? localStorage : sessionStorage;
+  } catch {
+    return null;
+  }
+}
+const readKey = () => storage("local")?.getItem(CLAUDE_KEY) ?? storage("session")?.getItem(CLAUDE_KEY) ?? "";
+function readPrefs(): { mode: "builtin" | "claude"; model: ModelId; remember: boolean } {
+  try {
+    return { mode: "builtin", model: "claude-opus-5-5", remember: false, ...JSON.parse(storage("local")?.getItem(CLAUDE_PREFS) ?? "{}") };
+  } catch {
+    return { mode: "builtin", model: "claude-opus-5-5", remember: false };
+  }
+}
+function readHistory(): unknown[] {
+  try {
+    return JSON.parse(storage("session")?.getItem(CLAUDE_HISTORY) ?? "[]") as unknown[];
+  } catch {
+    return [];
+  }
+}
 
 function readChat(): ChatMsg[] {
   try {
@@ -351,9 +393,39 @@ function DeckChat({
   const [text, setText] = useState("");
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string>();
+  const [prefs, setPrefs] = useState(readPrefs);
+  const [apiKey, setApiKey] = useState(readKey);
+  const [history, setHistory] = useState<unknown[]>(readHistory);
+  const [working, setWorking] = useState<string[]>([]);
   const abort = useRef<AbortController | null>(null);
+  const claudeAbort = useRef<AbortController | null>(null);
   const newest = useRef<HTMLDivElement | null>(null);
-  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => () => (abort.current?.abort(), claudeAbort.current?.abort()), []);
+  useEffect(() => {
+    try {
+      storage("local")?.setItem(CLAUDE_PREFS, JSON.stringify(prefs));
+    } catch {
+      /* preferences are a convenience */
+    }
+  }, [prefs]);
+  useEffect(() => {
+    try {
+      storage("session")?.setItem(CLAUDE_HISTORY, JSON.stringify(history));
+    } catch {
+      /* the conversation still works in this tab */
+    }
+  }, [history]);
+  const saveKey = (key: string, remember: boolean) => {
+    setApiKey(key);
+    try {
+      storage("local")?.removeItem(CLAUDE_KEY);
+      storage("session")?.removeItem(CLAUDE_KEY);
+      if (key) storage(remember ? "local" : "session")?.setItem(CLAUDE_KEY, key);
+    } catch {
+      /* kept in memory for this page */
+    }
+  };
+  const claude = prefs.mode === "claude";
   useEffect(() => {
     try {
       sessionStorage.setItem(CHAT_KEY, JSON.stringify(log.slice(-12)));
@@ -363,13 +435,44 @@ function DeckChat({
   }, [log]);
   const lastBot = [...log].reverse().find((m): m is Extract<ChatMsg, { from: "bot" }> => m.from === "bot");
 
+  const askClaude = async (msg: string) => {
+    claudeAbort.current?.abort();
+    const ctl = (claudeAbort.current = new AbortController());
+    setWorking([]);
+    const { askClaude: ask, claudeError } = await import("../claudeChat.ts");
+    try {
+      const turn = await ask({
+        apiKey,
+        model: prefs.model,
+        history: history as Parameters<typeof ask>[0]["history"],
+        text: msg,
+        pool,
+        signal: ctl.signal,
+        onTool: (name) => setWorking((w) => [...w, name]),
+      });
+      setHistory(turn.history);
+      setLog((l) => [
+        ...l,
+        { from: "claude", text: turn.refused ? "Claude declined this request." : turn.text, shown: turn.build, tools: turn.tools, usd: turn.usd, model: prefs.model, refused: turn.refused },
+      ]);
+      requestAnimationFrame(() => newest.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    } catch (e) {
+      if (!ctl.signal.aborted) setError(claudeError(e));
+    }
+  };
   const send = async (t: string) => {
     const msg = t.trim();
     if (!msg || thinking) return;
+    if (claude && !apiKey.trim()) return setError("Enter your Anthropic API key to talk with Claude, or switch to Built-in.");
     setText("");
     setError(undefined);
     setThinking(true);
     setLog((l) => [...l, { from: "you", text: msg }]);
+    if (claude) {
+      await askClaude(msg);
+      setThinking(false);
+      return;
+    }
     try {
       const answer = await deckChat(msg, lastBot?.answer.request ?? null, pool, lastBot?.shown?.archetype.key ?? null);
       setLog((l) => [...l, { from: "bot", answer, shown: answer.build }]);
@@ -382,8 +485,14 @@ function DeckChat({
   };
   const reset = () => {
     abort.current?.abort();
+    claudeAbort.current?.abort();
     setLog([]);
+    setHistory([]);
     setError(undefined);
+  };
+  const stopClaude = () => {
+    claudeAbort.current?.abort();
+    setThinking(false);
   };
   const patch = (index: number, p: Partial<Extract<ChatMsg, { from: "bot" }>>) =>
     setLog((l) => l.map((x, i) => (i === index && x.from === "bot" ? { ...x, ...p } : x)));
@@ -425,14 +534,76 @@ function DeckChat({
   return (
     <section className="panel lab-chat">
       <h2>Ask for a deck</h2>
-      <p className="muted small">
-        Write what you want: colours, Legends, cards to play or to leave out, an aggressive or a control deck, how many Units or sellable cards, or which deck it should
-        beat. Every message changes the last deck; "New deck" starts over.
-      </p>
+      <div className="an-options">
+        <button className={`chip ${!claude ? "sel" : ""}`} disabled={thinking} onClick={() => setPrefs((p) => ({ ...p, mode: "builtin" }))}>
+          Built-in
+        </button>
+        <button className={`chip ${claude ? "sel" : ""}`} disabled={thinking} onClick={() => setPrefs((p) => ({ ...p, mode: "claude" }))}>
+          Claude
+        </button>
+        {claude && (
+          <select className="lab-select" value={prefs.model} disabled={thinking} onChange={(e) => setPrefs((p) => ({ ...p, model: e.target.value as ModelId }))}>
+            {MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      {claude ? (
+        <div className="chat-claude">
+          <div className="chat-key">
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Your Anthropic API key"
+              value={apiKey}
+              onChange={(e) => saveKey(e.target.value, prefs.remember)}
+            />
+            <label className="small">
+              <input
+                type="checkbox"
+                checked={prefs.remember}
+                onChange={(e) => (setPrefs((p) => ({ ...p, remember: e.target.checked })), saveKey(apiKey, e.target.checked))}
+              />{" "}
+              Remember on this device
+            </label>
+            {apiKey && (
+              <button className="btn small" onClick={() => saveKey("", false)}>
+                Forget key
+              </button>
+            )}
+          </div>
+          <p className="muted small">
+            Talk with Claude about the deck you want; it builds and checks decks with the same ladder data. The key and your messages go from this browser straight to
+            Anthropic's API, and every message is billed to your API account (the cost of each answer is shown under it). Keys:{" "}
+            <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">
+              Claude Console
+            </a>
+            .
+          </p>
+        </div>
+      ) : (
+        <p className="muted small">
+          Write what you want: colours, Legends, cards to play or to leave out, an aggressive or a control deck, how many Units or sellable cards, or which deck it should
+          beat. Every message changes the last deck; "New deck" starts over.
+        </p>
+      )}
       {log.map((m, i) =>
         m.from === "you" ? (
           <div key={i} className="chat-you">
             {m.text}
+          </div>
+        ) : m.from === "claude" ? (
+          <div key={i} ref={i === log.length - 1 ? newest : undefined} className="chat-bot chat-claude-msg">
+            <div className="chat-text">{m.text || "(no text)"}</div>
+            <div className="small muted">
+              {MODELS.find((x) => x.id === m.model)?.label ?? m.model}
+              {m.tools.length > 0 && ` · ${[...new Set(m.tools)].map((t) => TOOL_LABEL[t] ?? t).join(", ")}`} · ≈ ${m.usd < 0.01 ? m.usd.toFixed(4) : m.usd.toFixed(2)}
+            </div>
+            {m.shown && <LadderDeck db={db} build={m.shown} check={checks[m.shown.deck.id]} busy={busy} onCheck={() => onCheck(m.shown!)} />}
           </div>
         ) : (
           <div key={i} ref={i === log.length - 1 ? newest : undefined} className="chat-bot">
@@ -505,7 +676,17 @@ function DeckChat({
           </div>
         ),
       )}
-      {thinking && <div className="chat-bot muted">Building…</div>}
+      {thinking &&
+        (claude ? (
+          <div className="chat-bot muted">
+            Claude is working{working.length ? `: ${TOOL_LABEL[working.at(-1)!] ?? working.at(-1)}` : "…"}{" "}
+            <button className="btn small" onClick={stopClaude}>
+              Stop
+            </button>
+          </div>
+        ) : (
+          <div className="chat-bot muted">Building…</div>
+        ))}
       {error && <div className="banner error">{error}</div>}
       {!log.length && (
         <div className="chat-examples">
@@ -519,7 +700,7 @@ function DeckChat({
       <div className="chat-input">
         <textarea
           rows={2}
-          placeholder="Describe the deck you want…"
+          placeholder={claude ? "Ask Claude for a deck…" : "Describe the deck you want…"}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -530,7 +711,7 @@ function DeckChat({
           }}
         />
         <button className="btn primary" disabled={!text.trim() || thinking} onClick={() => void send(text)}>
-          Build
+          {claude ? "Send" : "Build"}
         </button>
         {log.length > 0 && (
           <button className="btn" onClick={reset}>

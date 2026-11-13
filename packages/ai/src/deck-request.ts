@@ -141,7 +141,7 @@ function contextOf(tokens: string[], start: number): Context {
 }
 
 /** The variant of a card the ladder plays most (several cards share a name, e.g. Units named after Legends). */
-function mainVariant(slugs: string[]): string {
+export function mainVariant(slugs: string[]): string {
   if (slugs.length === 1) return slugs[0]!;
   const score = (s: string) => metaData().archetypes.reduce((n, a) => n + (a.cards.find((c) => c.slug === s)?.popularity ?? 0) * a.games, 0);
   return [...slugs].sort((a, b) => score(b) - score(a))[0]!;
@@ -450,10 +450,15 @@ function beatDecks(beat: NonNullable<DeckRequest["beat"]>, pool: Deck[]): Deck[]
 
 /** Reads the message and builds the deck it asks for. `pool`: the meta decks (for "a deck that beats X"). */
 export function answerMessage(text: string, previous: DeckRequest | null = null, pool: Deck[] = [], shown: string | null = null): DeckAnswer {
-  const catalog = getCatalog();
   const read = readMessage(text, previous);
-  const req = read.request;
-  if (read.understood.includes("Another archetype") && shown && !req.skip.includes(shown)) req.skip.push(shown);
+  if (read.understood.includes("Another archetype") && shown && !read.request.skip.includes(shown)) read.request.skip.push(shown);
+  return answerRequest(read.request, read.understood, pool);
+}
+
+/** Builds the deck a request asks for (from the chat, or from Claude through a tool). */
+export function answerRequest(req: DeckRequest, understood: string[] = [], pool: Deck[] = []): DeckAnswer {
+  const catalog = getCatalog();
+  const read = { understood };
   const name = (s: string) => catalog.bySlug(s)?.displayName ?? s;
   const reply: string[] = [];
 

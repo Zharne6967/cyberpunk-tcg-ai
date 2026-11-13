@@ -91,6 +91,23 @@ kształt talii, „Your request: …”, talia z liczbami przy kartach, „Also 
 **Test against X**: 3 kandydatów gra botami Strong z taliami meta X z puli (4 partie na talię), najlepszy zostaje
 pokazany. Testy: `deck-request.test.ts`.
 
+**Tryb Claude w czacie (2026-11-13, zgoda gracza na wersję z własnym kluczem API).** Przełącznik „Built-in /
+Claude” w „Ask for a deck”. Claude rozmawia dowolnie (rozumie każdy język), ale talie robi narzędziami na tych
+samych danych ladderu: `list_archetypes`, `archetype_cards`, `search_cards` (nazwa/tekst efektu/kolor/typ/koszt),
+`build_deck` (= `answerRequest` z życzeniami), `check_deck` (legalność, kształt, liczby z ladderu, podmiany Deck
+Doctora) — `packages/ai/src/deck-tools.ts`, uruchamiane w Web Workerze (`deckTool` w `browserAnalysis.ts`). Ostatnia
+talia zbudowana/sprawdzona przez Claude'a pokazuje się w czacie z liczbami i przyciskiem botów Strong. Strona:
+`apps/web/src/claudeChat.ts` (ładowany dopiero w trybie Claude, osobny chunk ~86 kB gzip): oficjalne SDK
+`@anthropic-ai/sdk` 1.8, `dangerouslyAllowBrowser` (klucz gracza, prosto z przeglądarki do api.anthropic.com, nic
+przez nasz serwer), tool runner (`thread: false`, `max_iterations: 10`), domyślnie `claude-opus-5-5` (do wyboru Sonnet
+5.5 i Haiku 5.5), `effort: medium`, auto-cache promptu, `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`)
+przy odmowie. Historia rozmowy (z blokami thinking, oddawanymi bez zmian) w `sessionStorage`; klucz w
+`sessionStorage`, albo `localStorage` po zaznaczeniu „Remember on this device”. Pod odpowiedzią: model, użyte
+narzędzia, koszt (cennik w `CLAUDE_MODELS`). Odpowiedzi po angielsku z oficjalnymi terminami (prośba gracza o UI po
+angielsku). Testy: `claudeChat.test.ts` (atrapa API: pętla narzędzi na prawdziwych danych, historia, koszt,
+nagłówki — SDK 1.x wysyła klucz jako `Authorization: Bearer`). **Prawdziwego wywołania API nie sprawdzałem** (nie
+wpisuję kluczy) — pierwsza rozmowa gracza jest testem.
+
 **Pula meta** = `data/decks/meta-*`, `rogue-ai-*` + talie dodane przez gracza („Meta pool” → *Add to the meta pool*,
 w przeglądarce, `apps/web/src/metaPool.ts`; używa jej też Deck Doctor). Dodane 2026-11-09 z ChoomBattler
 (ranked, Core BO1, 30 dni, Standard lists): Dexter/Padre/V (62.8%), Adam/Saburo/V (58.9%), Adam/Dexter/Padre (64.9%).

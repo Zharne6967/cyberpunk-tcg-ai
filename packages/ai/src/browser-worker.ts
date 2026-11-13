@@ -11,6 +11,7 @@ import { doctorOpponents, proposeSwaps } from "./doctor.ts";
 import { labBreed, labSeed } from "./lab.ts";
 import { bestLegends, metaAdvice, metaBuild, metaData } from "./meta-stats.ts";
 import { answerMessage, type DeckRequest } from "./deck-request.ts";
+import { runDeckTool } from "./deck-tools.ts";
 import { playMatch, type MatchOutcome } from "./match.ts";
 
 export type AnalysisWorkerIn =
@@ -23,7 +24,8 @@ export type AnalysisWorkerIn =
   | { type: "metaList"; job?: number }
   | { type: "metaBuild"; job?: number; keys?: string[]; legends?: string[] }
   | { type: "metaAdvice"; job?: number; deck: Deck; keep?: string[] }
-  | { type: "deckChat"; job?: number; text: string; previous: DeckRequest | null; pool: Deck[]; shown: string | null };
+  | { type: "deckChat"; job?: number; text: string; previous: DeckRequest | null; pool: Deck[]; shown: string | null }
+  | { type: "deckTool"; job?: number; name: string; input: unknown; pool: Deck[] };
 
 export type AnalysisWorkerOut =
   | { type: "plan"; job?: number; total: number }
@@ -54,6 +56,10 @@ ctx.onmessage = ({ data }) => {
       const all = metaData().archetypes.filter((a) => !data.keys || data.keys.includes(a.key));
       const builds = all.map((a) => metaBuild(a, data.legends?.length ? (bestLegends(a, data.legends) ?? undefined) : undefined)).filter((b) => !!b);
       ctx.postMessage({ type: "meta", job, result: builds });
+      return;
+    }
+    if (data.type === "deckTool") {
+      ctx.postMessage({ type: "meta", job, result: runDeckTool(data.name, data.input, data.pool) });
       return;
     }
     if (data.type === "deckChat") {
